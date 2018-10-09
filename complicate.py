@@ -24,7 +24,7 @@ def normalizer_factory(type="local", ndev=None, eps=1e-5 + 1e-10, mom=0.9):
     :return: a wrapper with signature, bn(data, name)
     """
     if type == "local":
-        def local_bn(data, name=None, momentum=mom):
+        def local_bn(data, name=None, momentum=mom, lr_mult=1.0, wd_mult=1.0):
             if name is None:
                 prev_name = data.name
                 name = prev_name + "_bn"
@@ -33,11 +33,13 @@ def normalizer_factory(type="local", ndev=None, eps=1e-5 + 1e-10, mom=0.9):
                                     fix_gamma=False,
                                     use_global_stats=False,
                                     momentum=momentum,
-                                    eps=eps)
+                                    eps=eps,
+                                    lr_mult=lr_mult,
+                                    wd_mult=wd_mult)
         return local_bn
 
     elif type == "fix":
-        def fix_bn(data, name=None):
+        def fix_bn(data, name=None, lr_mult=1.0, wd_mult=1.0):
             if name is None:
                 prev_name = data.name
                 name = prev_name + "_bn"
@@ -45,13 +47,15 @@ def normalizer_factory(type="local", ndev=None, eps=1e-5 + 1e-10, mom=0.9):
                                     name=name,
                                     fix_gamma=False,
                                     use_global_stats=True,
-                                    eps=eps)
+                                    eps=eps,
+                                    lr_mult=lr_mult,
+                                    wd_mult=wd_mult)
         return fix_bn
 
     elif type == "sync":
         assert ndev is not None, "Specify ndev for sync bn"
 
-        def sync_bn(data, name=None, momentum=mom):
+        def sync_bn(data, name=None, momentum=mom, lr_mult=1.0, wd_mult=1.0):
             bn_count[0] = bn_count[0] + 1
             if name is None:
                 prev_name = data.name
@@ -62,24 +66,27 @@ def normalizer_factory(type="local", ndev=None, eps=1e-5 + 1e-10, mom=0.9):
                                                 use_global_stats=False,
                                                 momentum=momentum,
                                                 eps=eps,
-                                                wd_mult=0,
                                                 ndev=ndev,
-                                                key=str(bn_count[0]))
+                                                key=str(bn_count[0]),
+                                                lr_mult=lr_mult,
+                                                wd_mult=wd_mult)
         return sync_bn
 
     elif type == "in":
-        def in_(data, name=None):
+        def in_(data, name=None, lr_mult=1.0, wd_mult=0.0):
             if name is None:
                 prev_name = data.name
                 name = prev_name + "_in"
             name = name.replace("_bn", "_in")
             return mx.sym.InstanceNorm(data=data,
                                        name=name,
-                                       eps=eps)
+                                       eps=eps,
+                                       lr_mult=lr_mult,
+                                       wd_mult=wd_mult)
         return in_
 
     elif type == "gn":
-        def gn(data, name=None):
+        def gn(data, name=None, lr_mult=1.0, wd_mult=1.0):
             if name is None:
                 prev_name = data.name
                 name = prev_name + "_gn"
@@ -87,27 +94,35 @@ def normalizer_factory(type="local", ndev=None, eps=1e-5 + 1e-10, mom=0.9):
             return mx.sym.contrib.GroupNorm(data=data,
                                             name=name,
                                             eps=eps,
-                                            num_group=32)
+                                            num_group=32,
+                                            lr_mult=lr_mult,
+                                            wd_mult=wd_mult)
         return gn
 
     elif type == "ibn":
-        def ibn(data, name=None, momentum=mom):
+        def ibn(data, name=None, momentum=mom, lr_mult=1.0, wd_mult=1.0):
             bn_count[0] = bn_count[0] + 1
             if name is None:
                 prev_name = data.name
                 name = prev_name + "_ibn"
             name = name.replace("_bn", "_ibn")
             split1, split2 = split_channel(data, 2, name + "_split")
-            _in = mx.sym.InstanceNorm(data=split1, name=name + "_in", eps=eps)
+            _in = mx.sym.InstanceNorm(data=split1,
+                                      name=name + "_in",
+                                      eps=eps,
+                                      lr_mult=lr_mult,
+                                      wd_mult=wd_mult)
+
             _bn = mx.sym.contrib.SyncBatchNorm(data=split2,
                                                name=name + "_bn",
                                                fix_gamma=False,
                                                use_global_stats=False,
                                                momentum=momentum,
                                                eps=eps,
-                                               wd_mult=0,
                                                ndev=ndev,
-                                               key=str(bn_count[0]))
+                                               key=str(bn_count[0]),
+                                               lr_mult=lr_mult,
+                                               wd_mult=wd_mult)
             _ibn = concat([_in, _bn], name=name + "_concat")
             return _ibn
         return ibn
