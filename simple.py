@@ -252,6 +252,20 @@ def split_channel(data, num_output, name):
                         squeeze_axis=False)
 
 
+def coin(prob, name):
+    """
+    return 1 at given probability, 0 otherwise.
+    :param prob:
+    :param name:
+    :return:
+    """
+    one = mx.sym.ones(1, name=name + "_one")
+    zero = mx.sym.zeros(1, name=name + "_zero")
+    flip = mx.sym.random_uniform(0, 1, shape=(1, ), name=name + "_{}_flip".format(prob))
+    result = mx.sym.where(flip < prob, one, zero, name=name + "_result")
+    return result
+
+
 def missing(*args, **kwargs):
     raise AttributeError("Your mxnet does not support this operator!")
 
