@@ -23,7 +23,7 @@ def normalizer_factory(type="local", ndev=None, eps=1e-5 + 1e-10, mom=0.9):
     :param mom: momentum of moving mean and moving variance
     :return: a wrapper with signature, bn(data, name)
     """
-    if type == "local":
+    if type == "local" or type == "localbn":
         def local_bn(data, name=None, momentum=mom, lr_mult=1.0, wd_mult=1.0):
             if name is None:
                 prev_name = data.name
@@ -38,7 +38,7 @@ def normalizer_factory(type="local", ndev=None, eps=1e-5 + 1e-10, mom=0.9):
                                     wd_mult=wd_mult)
         return local_bn
 
-    elif type == "fix":
+    elif type == "fix" or type == "fixbn":
         def fix_bn(data, name=None, lr_mult=1.0, wd_mult=1.0):
             if name is None:
                 prev_name = data.name
@@ -52,7 +52,7 @@ def normalizer_factory(type="local", ndev=None, eps=1e-5 + 1e-10, mom=0.9):
                                     wd_mult=wd_mult)
         return fix_bn
 
-    elif type == "sync":
+    elif type == "sync" or type == "syncbn":
         assert ndev is not None, "Specify ndev for sync bn"
 
         def sync_bn(data, name=None, momentum=mom, lr_mult=1.0, wd_mult=1.0):
