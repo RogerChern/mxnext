@@ -96,4 +96,4 @@ def normalizer_factory(type="local", ndev=None, eps=1e-5 + 1e-10, mom=0.9):
                                             wd_mult=wd_mult)
         return gn
     else:
-        raise KeyError("Unknown batchnorm type {}".format(type))
+        raise KeyError("Unknown norm type {}".format(type))
