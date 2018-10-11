@@ -4,7 +4,7 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 
-from .simple import concat, split_channel
+from .simple import add
 
 
 import mxnet as mx
@@ -99,21 +99,20 @@ def normalizer_factory(type="local", ndev=None, eps=1e-5 + 1e-10, mom=0.9):
                                             wd_mult=wd_mult)
         return gn
 
-    elif type == "ibn":
+    elif type == "ibn.1":
         def ibn(data, name=None, momentum=mom, lr_mult=1.0, wd_mult=1.0):
             bn_count[0] = bn_count[0] + 1
             if name is None:
                 prev_name = data.name
                 name = prev_name + "_ibn"
             name = name.replace("_bn", "_ibn")
-            split1, split2 = split_channel(data, 2, name + "_split")
-            _in = mx.sym.InstanceNorm(data=split1,
+            _in = mx.sym.InstanceNorm(data=data,
                                       name=name + "_in",
                                       eps=eps,
                                       lr_mult=lr_mult,
                                       wd_mult=wd_mult)
 
-            _bn = mx.sym.contrib.SyncBatchNorm(data=split2,
+            _bn = mx.sym.contrib.SyncBatchNorm(data=data,
                                                name=name + "_bn",
                                                fix_gamma=False,
                                                use_global_stats=False,
@@ -123,7 +122,7 @@ def normalizer_factory(type="local", ndev=None, eps=1e-5 + 1e-10, mom=0.9):
                                                key=str(bn_count[0]),
                                                lr_mult=lr_mult,
                                                wd_mult=wd_mult)
-            _ibn = concat([_in, _bn], name=name + "_concat")
+            _ibn = add(_in, _bn, name=name + "_add")
             return _ibn
         return ibn
 
