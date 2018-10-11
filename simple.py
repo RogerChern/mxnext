@@ -322,6 +322,12 @@ stop_grad = mx.sym.stop_gradient
 
 softmax_output = mx.sym.SoftmaxOutput
 
+add_n = mx.sym.add_n
+
+abs = mx.sym.abs
+
+make_loss = mx.sym.MakeLoss
+
 
 # combination
 def convrelu(data, name, filter, kernel=1, stride=1, pad=None, dilate=1, num_group=1, no_bias=True, init=None,
