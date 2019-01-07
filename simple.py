@@ -211,6 +211,18 @@ def pool(data, name, kernel=3, stride=2, pad=None,
                               global_pool=False)
 
 
+def max_pool(data, name, kernel=2, stride=2, pad=None, pooling_convention='valid'):
+    return pool(data, name, kernel, stride, pad, "max", pooling_convention, False)
+
+
+def avg_pool(data, name, kernel=2, stride=2, pad=None, pooling_convention='valid'):
+    return pool(data, name, kernel, stride, pad, "avg", pooling_convention, False)
+
+
+def global_avg_pool(data, name):
+    return pool(data, name, None, None, None, None, None, True)
+
+
 def upsample_bilinear(data, name, scale, filter):
     if scale == 1:
         return data
