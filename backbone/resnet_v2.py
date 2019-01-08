@@ -1,7 +1,7 @@
 from __future__ import division
 
 
-from ..simple import reluconv, conv, pool, relu, add, whiten, var
+from ..simple import reluconv, conv, pool, relu, add, whiten, var, fixbn
 from ..complicate import normalizer_factory
 
 
@@ -127,7 +127,10 @@ class Builder(object):
 
     @staticmethod
     def resnet_c5(data, num_block, stride, dilate, norm_type, norm_mom, ndev):
-        return Builder.resnet_stage(data, "stage4", num_block, 2048, stride, dilate, norm_type, norm_mom, ndev)
+        c5 = Builder.resnet_stage(data, "stage4", num_block, 2048, stride, dilate, norm_type, norm_mom, ndev)
+        c5 = fixbn(c5, "bn1")
+        c5 = relu(c5)
+        return c5
 
     @staticmethod
     def resnet_c4_factory(depth, use_3x3_conv0, use_bn_preprocess, norm_type="local", norm_mom=0.9, ndev=None):
