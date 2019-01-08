@@ -16,8 +16,8 @@ class Builder(object):
             200: (3, 24, 36, 3)
     }
 
-    @staticmethod
-    def resnet_unit(data, name, filter, stride, dilate, proj, norm_type, norm_mom, ndev):
+    @classmethod
+    def resnet_unit(cls, data, name, filter, stride, dilate, proj, norm_type, norm_mom, ndev):
         """
         One resnet unit is comprised of 2 or 3 convolutions and a shortcut.
         :param data:
@@ -50,8 +50,8 @@ class Builder(object):
 
         return add(conv3, shortcut, name=name + "_plus")
 
-    @staticmethod
-    def resnet_stage(data, name, num_block, filter, stride, dilate, norm_type, norm_mom, ndev):
+    @classmethod
+    def resnet_stage(cls, data, name, num_block, filter, stride, dilate, norm_type, norm_mom, ndev):
         """
         One resnet stage is comprised of multiple resnet units. Refer to depth config for more information.
         :param data:
@@ -73,8 +73,8 @@ class Builder(object):
 
         return data
 
-    @staticmethod
-    def resnet_c1(data, use_3x3_conv0, use_bn_preprocess, norm_type, norm_mom, ndev):
+    @classmethod
+    def resnet_c1(cls, data, use_3x3_conv0, use_bn_preprocess, norm_type, norm_mom, ndev):
         """
         Resnet C1 is comprised of irregular initial layers.
         :param data: image symbol
@@ -113,27 +113,27 @@ class Builder(object):
 
         return data
 
-    @staticmethod
-    def resnet_c2(data, num_block, stride, dilate, norm_type, norm_mom, ndev):
+    @classmethod
+    def resnet_c2(cls, data, num_block, stride, dilate, norm_type, norm_mom, ndev):
         return Builder.resnet_stage(data, "stage1", num_block, 256, stride, dilate, norm_type, norm_mom, ndev)
 
-    @staticmethod
-    def resnet_c3(data, num_block, stride, dilate, norm_type, norm_mom, ndev):
+    @classmethod
+    def resnet_c3(cls, data, num_block, stride, dilate, norm_type, norm_mom, ndev):
         return Builder.resnet_stage(data, "stage2", num_block, 512, stride, dilate, norm_type, norm_mom, ndev)
 
-    @staticmethod
-    def resnet_c4(data, num_block, stride, dilate, norm_type, norm_mom, ndev):
+    @classmethod
+    def resnet_c4(cls, data, num_block, stride, dilate, norm_type, norm_mom, ndev):
         return Builder.resnet_stage(data, "stage3", num_block, 1024, stride, dilate, norm_type, norm_mom, ndev)
 
-    @staticmethod
-    def resnet_c5(data, num_block, stride, dilate, norm_type, norm_mom, ndev):
+    @classmethod
+    def resnet_c5(cls, data, num_block, stride, dilate, norm_type, norm_mom, ndev):
         c5 = Builder.resnet_stage(data, "stage4", num_block, 2048, stride, dilate, norm_type, norm_mom, ndev)
         c5 = fixbn(c5, "bn1")
         c5 = relu(c5)
         return c5
 
-    @staticmethod
-    def resnet_c4_factory(depth, use_3x3_conv0, use_bn_preprocess, norm_type="local", norm_mom=0.9, ndev=None):
+    @classmethod
+    def resnet_c4_factory(cls, depth, use_3x3_conv0, use_bn_preprocess, norm_type="local", norm_mom=0.9, ndev=None):
         num_c2_unit, num_c3_unit, num_c4_unit, num_c5_unit = Builder.depth_config[depth]
 
         data = var("data")
@@ -144,8 +144,8 @@ class Builder(object):
 
         return c4
 
-    @staticmethod
-    def resnet_c5_factory(depth, use_3x3_conv0, use_bn_preprocess, norm_type="local", norm_mom=0.9, ndev=None):
+    @classmethod
+    def resnet_c5_factory(cls, depth, use_3x3_conv0, use_bn_preprocess, norm_type="local", norm_mom=0.9, ndev=None):
         num_c2_unit, num_c3_unit, num_c4_unit, num_c5_unit = Builder.depth_config[depth]
 
         data = var("data")
@@ -157,8 +157,8 @@ class Builder(object):
 
         return c5
 
-    @staticmethod
-    def resnet_c4c5_factory(depth, use_3x3_conv0, use_bn_preprocess, norm_type="local", norm_mom=0.9, ndev=None):
+    @classmethod
+    def resnet_c4c5_factory(cls, depth, use_3x3_conv0, use_bn_preprocess, norm_type="local", norm_mom=0.9, ndev=None):
         num_c2_unit, num_c3_unit, num_c4_unit, num_c5_unit = Builder.depth_config[depth]
 
         data = var("data")
@@ -170,8 +170,8 @@ class Builder(object):
 
         return c4, c5
 
-    @staticmethod
-    def resnet_fpn_factory(depth, use_3x3_conv0, use_bn_preprocess, norm_type="local", norm_mom=0.9, ndev=None):
+    @classmethod
+    def resnet_fpn_factory(cls, depth, use_3x3_conv0, use_bn_preprocess, norm_type="local", norm_mom=0.9, ndev=None):
         num_c2_unit, num_c3_unit, num_c4_unit, num_c5_unit = Builder.depth_config[depth]
 
         data = var("data")
