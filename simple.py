@@ -342,6 +342,8 @@ make_loss = mx.sym.MakeLoss
 
 to_fp16 = lambda data, name: mx.sym.cast(data, dtype=np.float16, name=name)
 
+to_fp32 = lambda data, name: mx.sym.cast(data, dtype=np.float32, name=name)
+
 
 # combination
 def convrelu(data, name, filter, kernel=1, stride=1, pad=None, dilate=1, num_group=1, no_bias=True, init=None,
