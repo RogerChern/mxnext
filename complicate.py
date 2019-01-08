@@ -20,6 +20,10 @@ def normalizer_factory(type="local", ndev=None, eps=1e-5 + 1e-10, mom=0.9):
     :param mom: momentum of moving mean and moving variance
     :return: a wrapper with signature, bn(data, name)
     """
+    # sometimes the normalizer may be pre-constructed
+    if callable(type):
+        return type
+
     if type == "local" or type == "localbn":
         def local_bn(data, name=None, momentum=mom, lr_mult=1.0, wd_mult=1.0):
             if name is None:

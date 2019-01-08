@@ -180,6 +180,27 @@ class Builder(object):
 
         return c2, c3, c4, c5, p6
 
+    def get_backbone(self, variant, depth, endpoint, normalizer, fp16):
+        # parse variant
+        if variant == "mxnet":
+            use_bn_preprocess = True
+            use_3x3_conv0 = False
+        elif variant == "tusimple":
+            use_bn_preprocess = False
+            use_3x3_conv0 = True
+        else:
+            raise KeyError("Unknown backbone variant {}".format(variant))
+
+        # parse endpoint
+        if endpoint == "c4":
+            factory = Builder.resnet_c4_factory
+        elif endpoint == "c4c5":
+            factory = Builder.resnet_c4c5_factory
+        else:
+            raise KeyError("Unknown backbone endpoint {}".format(endpoint))
+
+        return factory(depth, use_3x3_conv0, use_bn_preprocess, norm_type=normalizer, fp16=fp16)
+
     def __getattr__(self, name):
         """
         Allow user specifing backbone as a string in the config file
@@ -265,6 +286,6 @@ if __name__ == "__main__":
     #############################################################
 
     h = Builder()
-    sym = getattr(h, "tornadomeet_resnet50_c5_syncbn")(8)
+    sym = getattr(h, "tornadomeet_resnet50_c5_syncbn_fp16")(8)
     import mxnet as mx
-    mx.viz.print_summary(sym)
+    # mx.viz.print_summary(sym)
