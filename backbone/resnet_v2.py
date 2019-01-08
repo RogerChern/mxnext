@@ -1,7 +1,7 @@
 from __future__ import division
 
 
-from ..simple import reluconv, conv, pool, relu, add, whiten, var, fixbn
+from ..simple import reluconv, conv, pool, relu, add, whiten, var, fixbn, to_fp16
 from ..complicate import normalizer_factory
 
 
@@ -127,46 +127,42 @@ class Builder(object):
 
     @classmethod
     def resnet_c5(cls, data, num_block, stride, dilate, norm_type, norm_mom, ndev):
-        c5 = Builder.resnet_stage(data, "stage4", num_block, 2048, stride, dilate, norm_type, norm_mom, ndev)
-        c5 = fixbn(c5, "bn1")
-        c5 = relu(c5)
-        return c5
+        return Builder.resnet_stage(data, "stage4", num_block, 2048, stride, dilate, norm_type, norm_mom, ndev)
 
     @classmethod
-    def resnet_c4_factory(cls, depth, use_3x3_conv0, use_bn_preprocess, norm_type="local", norm_mom=0.9, ndev=None):
+    def resnet_factory(cls, depth, use_3x3_conv0, use_bn_preprocess, norm_type="local", norm_mom=0.9, ndev=None, fp16=False):
         num_c2_unit, num_c3_unit, num_c4_unit, num_c5_unit = Builder.depth_config[depth]
 
         data = var("data")
+        if fp16:
+            data = to_fp16(data, "data_fp16")
         c1 = Builder.resnet_c1(data, use_3x3_conv0, use_bn_preprocess, norm_type, norm_mom, ndev)
         c2 = Builder.resnet_c2(c1, num_c2_unit, 1, 1, norm_type, norm_mom, ndev)
         c3 = Builder.resnet_c3(c2, num_c3_unit, 2, 1, norm_type, norm_mom, ndev)
         c4 = Builder.resnet_c4(c3, num_c4_unit, 2, 1, norm_type, norm_mom, ndev)
+        c5 = Builder.resnet_c5(c4, num_c5_unit, 1, 2, norm_type, norm_mom, ndev)
+
+        return c1, c2, c3, c4, c5
+
+    @classmethod
+    def resnet_c4_factory(cls, depth, use_3x3_conv0, use_bn_preprocess, norm_type="local", norm_mom=0.9, ndev=None, fp16=False):
+        c1, c2, c3, c4, c5 = Builder.resnet_factory(depth, use_3x3_conv0, use_bn_preprocess, norm_type, norm_mom, ndev, fp16)
 
         return c4
 
     @classmethod
-    def resnet_c5_factory(cls, depth, use_3x3_conv0, use_bn_preprocess, norm_type="local", norm_mom=0.9, ndev=None):
-        num_c2_unit, num_c3_unit, num_c4_unit, num_c5_unit = Builder.depth_config[depth]
-
-        data = var("data")
-        c1 = Builder.resnet_c1(data, use_3x3_conv0, use_bn_preprocess, norm_type, norm_mom, ndev)
-        c2 = Builder.resnet_c2(c1, num_c2_unit, 1, 1, norm_type, norm_mom, ndev)
-        c3 = Builder.resnet_c3(c2, num_c3_unit, 2, 1, norm_type, norm_mom, ndev)
-        c4 = Builder.resnet_c4(c3, num_c4_unit, 2, 1, norm_type, norm_mom, ndev)
-        c5 = Builder.resnet_c5(c4, num_c5_unit, 1, 2, norm_type, norm_mom, ndev)
+    def resnet_c5_factory(cls, depth, use_3x3_conv0, use_bn_preprocess, norm_type="local", norm_mom=0.9, ndev=None, fp16=False):
+        c1, c2, c3, c4, c5 = Builder.resnet_factory(depth, use_3x3_conv0, use_bn_preprocess, norm_type, norm_mom, ndev, fp16)
+        c5 = fixbn(c5, "bn1")
+        c5 = relu(c5)
 
         return c5
 
     @classmethod
-    def resnet_c4c5_factory(cls, depth, use_3x3_conv0, use_bn_preprocess, norm_type="local", norm_mom=0.9, ndev=None):
-        num_c2_unit, num_c3_unit, num_c4_unit, num_c5_unit = Builder.depth_config[depth]
-
-        data = var("data")
-        c1 = Builder.resnet_c1(data, use_3x3_conv0, use_bn_preprocess, norm_type, norm_mom, ndev)
-        c2 = Builder.resnet_c2(c1, num_c2_unit, 1, 1, norm_type, norm_mom, ndev)
-        c3 = Builder.resnet_c3(c2, num_c3_unit, 2, 1, norm_type, norm_mom, ndev)
-        c4 = Builder.resnet_c4(c3, num_c4_unit, 2, 1, norm_type, norm_mom, ndev)
-        c5 = Builder.resnet_c5(c4, num_c5_unit, 1, 2, norm_type, norm_mom, ndev)
+    def resnet_c4c5_factory(cls, depth, use_3x3_conv0, use_bn_preprocess, norm_type="local", norm_mom=0.9, ndev=None, fp16=False):
+        c1, c2, c3, c4, c5 = Builder.resnet_factory(depth, use_3x3_conv0, use_bn_preprocess, norm_type, norm_mom, ndev, fp16)
+        c5 = fixbn(c5, "bn1")
+        c5 = relu(c5)
 
         return c4, c5
 
@@ -198,8 +194,12 @@ class Builder(object):
         print("get symbol {}".format(name))
 
         parts = name.split("_")
-        assert len(parts) == 4
-        variant, network, last_layer, normalizer = parts
+        if len(parts) == 4:
+            variant, network, last_layer, normalizer = parts
+        elif len(parts) == 5:
+            variant, network, last_layer, normalizer, dtype = parts
+        else:
+            raise KeyError("Unknown backbone type {}".format(name))
 
         # parse variant
         if variant == "tornadomeet":
@@ -245,7 +245,13 @@ class Builder(object):
         else:
             raise KeyError("Unknown backbone normalizer {}".format(name))
 
-        return lambda: factory(depth, use_3x3_conv0, use_bn_preprocess, norm_type=norm_type)
+        # parse dtype
+        if len(parts) == 5 and dtype == "fp16":
+            fp16 = True
+        else:
+            fp16 = False
+
+        return lambda: factory(depth, use_3x3_conv0, use_bn_preprocess, norm_type=norm_type, fp16=fp16)
 
 
 # TODO: hook import with ResNetV2Builder
