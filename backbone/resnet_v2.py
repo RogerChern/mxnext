@@ -67,9 +67,9 @@ class Builder(object):
         """
         s, d = stride, dilate
 
-        data = Builder.resnet_unit(data, "{}_unit1".format(name), filter, s, d, True, norm_type, norm_mom, ndev)
+        data = cls.resnet_unit(data, "{}_unit1".format(name), filter, s, d, True, norm_type, norm_mom, ndev)
         for i in range(2, num_block + 1):
-            data = Builder.resnet_unit(data, "{}_unit{}".format(name, i), filter, 1, d, False, norm_type, norm_mom, ndev)
+            data = cls.resnet_unit(data, "{}_unit{}".format(name, i), filter, 1, d, False, norm_type, norm_mom, ndev)
 
         return data
 
@@ -115,44 +115,44 @@ class Builder(object):
 
     @classmethod
     def resnet_c2(cls, data, num_block, stride, dilate, norm_type, norm_mom, ndev):
-        return Builder.resnet_stage(data, "stage1", num_block, 256, stride, dilate, norm_type, norm_mom, ndev)
+        return cls.resnet_stage(data, "stage1", num_block, 256, stride, dilate, norm_type, norm_mom, ndev)
 
     @classmethod
     def resnet_c3(cls, data, num_block, stride, dilate, norm_type, norm_mom, ndev):
-        return Builder.resnet_stage(data, "stage2", num_block, 512, stride, dilate, norm_type, norm_mom, ndev)
+        return cls.resnet_stage(data, "stage2", num_block, 512, stride, dilate, norm_type, norm_mom, ndev)
 
     @classmethod
     def resnet_c4(cls, data, num_block, stride, dilate, norm_type, norm_mom, ndev):
-        return Builder.resnet_stage(data, "stage3", num_block, 1024, stride, dilate, norm_type, norm_mom, ndev)
+        return cls.resnet_stage(data, "stage3", num_block, 1024, stride, dilate, norm_type, norm_mom, ndev)
 
     @classmethod
     def resnet_c5(cls, data, num_block, stride, dilate, norm_type, norm_mom, ndev):
-        return Builder.resnet_stage(data, "stage4", num_block, 2048, stride, dilate, norm_type, norm_mom, ndev)
+        return cls.resnet_stage(data, "stage4", num_block, 2048, stride, dilate, norm_type, norm_mom, ndev)
 
     @classmethod
     def resnet_factory(cls, depth, use_3x3_conv0, use_bn_preprocess, norm_type="local", norm_mom=0.9, ndev=None, fp16=False):
-        num_c2_unit, num_c3_unit, num_c4_unit, num_c5_unit = Builder.depth_config[depth]
+        num_c2_unit, num_c3_unit, num_c4_unit, num_c5_unit = cls.depth_config[depth]
 
         data = var("data")
         if fp16:
             data = to_fp16(data, "data_fp16")
-        c1 = Builder.resnet_c1(data, use_3x3_conv0, use_bn_preprocess, norm_type, norm_mom, ndev)
-        c2 = Builder.resnet_c2(c1, num_c2_unit, 1, 1, norm_type, norm_mom, ndev)
-        c3 = Builder.resnet_c3(c2, num_c3_unit, 2, 1, norm_type, norm_mom, ndev)
-        c4 = Builder.resnet_c4(c3, num_c4_unit, 2, 1, norm_type, norm_mom, ndev)
-        c5 = Builder.resnet_c5(c4, num_c5_unit, 1, 2, norm_type, norm_mom, ndev)
+        c1 = cls.resnet_c1(data, use_3x3_conv0, use_bn_preprocess, norm_type, norm_mom, ndev)
+        c2 = cls.resnet_c2(c1, num_c2_unit, 1, 1, norm_type, norm_mom, ndev)
+        c3 = cls.resnet_c3(c2, num_c3_unit, 2, 1, norm_type, norm_mom, ndev)
+        c4 = cls.resnet_c4(c3, num_c4_unit, 2, 1, norm_type, norm_mom, ndev)
+        c5 = cls.resnet_c5(c4, num_c5_unit, 1, 2, norm_type, norm_mom, ndev)
 
         return c1, c2, c3, c4, c5
 
     @classmethod
     def resnet_c4_factory(cls, depth, use_3x3_conv0, use_bn_preprocess, norm_type="local", norm_mom=0.9, ndev=None, fp16=False):
-        c1, c2, c3, c4, c5 = Builder.resnet_factory(depth, use_3x3_conv0, use_bn_preprocess, norm_type, norm_mom, ndev, fp16)
+        c1, c2, c3, c4, c5 = cls.resnet_factory(depth, use_3x3_conv0, use_bn_preprocess, norm_type, norm_mom, ndev, fp16)
 
         return c4
 
     @classmethod
     def resnet_c5_factory(cls, depth, use_3x3_conv0, use_bn_preprocess, norm_type="local", norm_mom=0.9, ndev=None, fp16=False):
-        c1, c2, c3, c4, c5 = Builder.resnet_factory(depth, use_3x3_conv0, use_bn_preprocess, norm_type, norm_mom, ndev, fp16)
+        c1, c2, c3, c4, c5 = cls.resnet_factory(depth, use_3x3_conv0, use_bn_preprocess, norm_type, norm_mom, ndev, fp16)
         c5 = fixbn(c5, "bn1")
         c5 = relu(c5)
 
@@ -160,7 +160,7 @@ class Builder(object):
 
     @classmethod
     def resnet_c4c5_factory(cls, depth, use_3x3_conv0, use_bn_preprocess, norm_type="local", norm_mom=0.9, ndev=None, fp16=False):
-        c1, c2, c3, c4, c5 = Builder.resnet_factory(depth, use_3x3_conv0, use_bn_preprocess, norm_type, norm_mom, ndev, fp16)
+        c1, c2, c3, c4, c5 = cls.resnet_factory(depth, use_3x3_conv0, use_bn_preprocess, norm_type, norm_mom, ndev, fp16)
         c5 = fixbn(c5, "bn1")
         c5 = relu(c5)
 
@@ -168,14 +168,14 @@ class Builder(object):
 
     @classmethod
     def resnet_fpn_factory(cls, depth, use_3x3_conv0, use_bn_preprocess, norm_type="local", norm_mom=0.9, ndev=None):
-        num_c2_unit, num_c3_unit, num_c4_unit, num_c5_unit = Builder.depth_config[depth]
+        num_c2_unit, num_c3_unit, num_c4_unit, num_c5_unit = cls.depth_config[depth]
 
         data = var("data")
-        c1 = Builder.resnet_c1(data, use_3x3_conv0, use_bn_preprocess, norm_type, norm_mom, ndev)
-        c2 = Builder.resnet_c2(c1, num_c2_unit, 1, 1, norm_type, norm_mom, ndev)
-        c3 = Builder.resnet_c3(c2, num_c3_unit, 2, 1, norm_type, norm_mom, ndev)
-        c4 = Builder.resnet_c4(c3, num_c4_unit, 2, 1, norm_type, norm_mom, ndev)
-        c5 = Builder.resnet_c5(c4, num_c5_unit, 2, 1, norm_type, norm_mom, ndev)
+        c1 = cls.resnet_c1(data, use_3x3_conv0, use_bn_preprocess, norm_type, norm_mom, ndev)
+        c2 = cls.resnet_c2(c1, num_c2_unit, 1, 1, norm_type, norm_mom, ndev)
+        c3 = cls.resnet_c3(c2, num_c3_unit, 2, 1, norm_type, norm_mom, ndev)
+        c4 = cls.resnet_c4(c3, num_c4_unit, 2, 1, norm_type, norm_mom, ndev)
+        c5 = cls.resnet_c5(c4, num_c5_unit, 2, 1, norm_type, norm_mom, ndev)
         p6 = pool(c5, name="c5_2x_downsampled", kernel=1)
 
         return c2, c3, c4, c5, p6
@@ -193,9 +193,9 @@ class Builder(object):
 
         # parse endpoint
         if endpoint == "c4":
-            factory = Builder.resnet_c4_factory
+            factory = self.resnet_c4_factory
         elif endpoint == "c4c5":
-            factory = Builder.resnet_c4c5_factory
+            factory = self.resnet_c4c5_factory
         else:
             raise KeyError("Unknown backbone endpoint {}".format(endpoint))
 
@@ -246,13 +246,13 @@ class Builder(object):
 
         # parse last layer
         if last_layer == "c4":
-            factory = Builder.resnet_c4_factory
+            factory = self.resnet_c4_factory
         elif last_layer == "c5":
-            factory = Builder.resnet_c5_factory
+            factory = self.resnet_c5_factory
         elif last_layer == "c4c5":
-            factory = Builder.resnet_c4c5_factory
+            factory = self.resnet_c4c5_factory
         elif last_layer == "fpn":
-            factory = Builder.resnet_fpn_factory
+            factory = self.resnet_fpn_factory
         else:
             raise KeyError("Unknown backbone last layer {}".format(name))
 
