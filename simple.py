@@ -100,8 +100,8 @@ def whiten(data, name="bn_data"):
                             eps=1e-5+1e-10)
 
 
-def conv(data, name, filter, kernel=1, stride=1, pad=None, dilate=1, num_group=1, no_bias=True, init=None, lr_mult=1.0,
-         wd_mult=1.0):
+def conv(data, name, filter, kernel=1, stride=1, pad=None, dilate=1, num_group=1,
+         no_bias=True, init=None, lr_mult=1.0, wd_mult=1.0, weight=None, bias=None):
     if isinstance(kernel, int):
         kernel = (kernel, kernel)
     if isinstance(stride, int):
@@ -115,17 +115,19 @@ def conv(data, name, filter, kernel=1, stride=1, pad=None, dilate=1, num_group=1
         pad = (pad, pad)
 
     # specific initialization method
-    if init is not None:
-        assert isinstance(init, mx.init.Initializer)
-        weight = mx.sym.var(name=name + "_weight", init=init, lr_mult=lr_mult, wd_mult=wd_mult)
-    elif lr_mult != 1.0 or wd_mult != 1.0:
-        weight = mx.sym.var(name=name + "_weight", lr_mult=lr_mult, wd_mult=wd_mult)
-    else:
-        weight = None
+    if not isinstance(weight, mx.sym.Symbol):
+        if init is not None:
+            assert isinstance(init, mx.init.Initializer)
+            weight = mx.sym.var(name=name + "_weight", init=init, lr_mult=lr_mult, wd_mult=wd_mult)
+        elif lr_mult != 1.0 or wd_mult != 1.0:
+            weight = mx.sym.var(name=name + "_weight", lr_mult=lr_mult, wd_mult=wd_mult)
+        else:
+            weight = None
 
     return mx.sym.Convolution(data=data,
                               name=name,
                               weight=weight,
+                              bias=bias,
                               num_filter=filter,
                               kernel=kernel,
                               stride=stride,
@@ -136,22 +138,24 @@ def conv(data, name, filter, kernel=1, stride=1, pad=None, dilate=1, num_group=1
                               no_bias=no_bias)
 
 
-def fc(data, name, num_hidden=None, hidden=None, flatten=True, no_bias=False, init=None, lr_mult=1.0, wd_mult=1.0):
-    assert num_hidden is not None or hidden is not None, "Specify number of output channel"
+def fc(data, name, filter, flatten=True, no_bias=False, init=None,
+       lr_mult=1.0, wd_mult=1.0, weight=None, bias=None):
 
     # specific initialization method
-    if init is not None:
-        assert isinstance(init, mx.init.Initializer)
-        weight = mx.sym.var(name=name + "_weight", init=init, lr_mult=lr_mult, wd_mult=wd_mult)
-    elif lr_mult != 1.0 or wd_mult != 1.0:
-        weight = mx.sym.var(name=name + "_weight", lr_mult=lr_mult, wd_mult=wd_mult)
-    else:
-        weight = None
+    if not isinstance(weight, mx.sym.Symbol):
+        if init is not None:
+            assert isinstance(init, mx.init.Initializer)
+            weight = mx.sym.var(name=name + "_weight", init=init, lr_mult=lr_mult, wd_mult=wd_mult)
+        elif lr_mult != 1.0 or wd_mult != 1.0:
+            weight = mx.sym.var(name=name + "_weight", lr_mult=lr_mult, wd_mult=wd_mult)
+        else:
+            weight = None
 
     return mx.sym.FullyConnected(data=data,
                                  name=name,
                                  weight=weight,
-                                 num_hidden=num_hidden or hidden,
+                                 bias=bias,
+                                 num_hidden=filter,
                                  no_bias=no_bias,
                                  flatten=flatten)
 
