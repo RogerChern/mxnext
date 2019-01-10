@@ -33,22 +33,26 @@ class Builder(object):
         """
         norm = normalizer_factory(type=norm_type, ndev=ndev, mom=norm_mom)
 
-        bn1 = norm(data=data, name=name + "_bn1")
-        relu1 = relu(bn1)
-        conv1 = conv(relu1, name=name + "_conv1", filter=filter // 4)
+        conv1 = conv(data, name=name + "_conv1", filter=filter // 4, stride=stride, dilate=dilate)
+        bn1 = norm(data=conv1, name=name + "_bn1")
+        relu1 = relu(bn1, name=name + "_relu1")
 
-        bn2 = norm(data=conv1, name=name + "_bn2")
-        conv2 = reluconv(bn2, name=name + "_conv2", filter=filter // 4, kernel=3, stride=stride, dilate=dilate)
+        conv2 = conv(relu1, name=name + "_conv2", filter=filter // 4, kernel=3)
+        bn2 = norm(data=conv2, name=name + "_bn2")
+        relu2 = relu(bn2, name=name + "_relu2")
 
-        bn3 = norm(data=conv2, name=name + "_bn3")
-        conv3 = reluconv(bn3, name=name + "_conv3", filter=filter)
+        conv3 = conv(relu2, name=name + "_conv3", filter=filter)
+        bn3 = norm(data=conv3, name=name + "_bn3")
 
         if proj:
-            shortcut = conv(relu1, name=name + "_sc", filter=filter, stride=stride)
+            shortcut = conv(data, name=name + "_sc", filter=filter, stride=stride)
+            soortcut = norm(data=shortcut, name=name + "_sc_bn")
         else:
             shortcut = data
 
-        return add(conv3, shortcut, name=name + "_plus")
+        eltwise = add(bn3, shortcut, name=name + "_plus")
+
+        return relu(eltwise, name=name + "_relu")
 
     @classmethod
     def resnet_stage(cls, data, name, num_block, filter, stride, dilate, norm_type, norm_mom, ndev):
@@ -212,7 +216,7 @@ class Builder(object):
         Allow user specifing backbone as a string in the config file
         backbone comes in 4 parts of format variant_network_last_norm-type, e.g. tusimple_resnet50_c4_fixbn
         - variants can be tusimple, tornadomeet or msra
-        - networks can be resnetXXv2
+        - networks can be resnetXXv1
         - last can be c4, c5 or fpn
         - norm type can be fixbn, localbn, syncbn or gn
         :param name: backbone type
@@ -284,14 +288,14 @@ class Builder(object):
         return lambda: factory(depth, use_3x3_conv0, use_bn_preprocess, norm_type=norm_type, fp16=fp16)
 
 
-# TODO: hook import with ResNetV2Builder
+# TODO: hook import with ResNetV1Builder
 # import sys
-# sys.modules[__name__] = ResNetV2Builder()
+# sys.modules[__name__] = ResNetV1Builder()
 
 
 if __name__ == "__main__":
     #############################################################
-    # python -m mxnext.backbone.resnet_v2
+    # python -m mxnext.backbone.resnet_v1
     #############################################################
 
     h = Builder()

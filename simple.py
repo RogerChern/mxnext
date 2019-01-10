@@ -302,6 +302,16 @@ try:
 except AttributeError:
     print("\033[91m" + "[Warning] Your mxnet does not support DecodeBBox" + "\033[0m")
 
+try:
+    bbox_norm = mx.sym.contrib.BBoxNorm
+except AttributeError:
+    print("\033[91m" + "[Warning] Your mxnet does not support BBoxNorm" + "\033[0m")
+
+try:
+    focal_loss = mx.sym.contrib.FocalLoss
+except AttributeError:
+    print("\033[91m" + "[Warning] Your mxnet does not support FocalLoss" + "\033[0m")
+
 l2norm = mx.sym.L2Normalization
 
 batch_dot = mx.sym.batch_dot
@@ -343,6 +353,8 @@ add_n = mx.sym.add_n
 abs = mx.sym.abs
 
 make_loss = mx.sym.MakeLoss
+
+transpose = mx.sym.transpose
 
 to_fp16 = lambda data, name: mx.sym.cast(data, dtype=np.float16, name=name)
 
