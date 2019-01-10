@@ -144,7 +144,7 @@ class Builder(object):
         c2 = cls.resnet_c2(c1, num_c2_unit, 1, 1, norm_type, norm_mom, ndev)
         c3 = cls.resnet_c3(c2, num_c3_unit, 2, 1, norm_type, norm_mom, ndev)
         c4 = cls.resnet_c4(c3, num_c4_unit, 2, 1, norm_type, norm_mom, ndev)
-        c5 = cls.resnet_c5(c4, num_c5_unit, 1, 2, norm_type, norm_mom, ndev)
+        c5 = cls.resnet_c5(c4, num_c5_unit, 2, 1, norm_type, norm_mom, ndev)
 
         return c1, c2, c3, c4, c5
 
