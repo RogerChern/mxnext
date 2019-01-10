@@ -33,22 +33,26 @@ class Builder(object):
         """
         norm = normalizer_factory(type=norm_type, ndev=ndev, mom=norm_mom)
 
-        bn1 = norm(data=data, name=name + "_bn1")
-        relu1 = relu(bn1)
-        conv1 = conv(relu1, name=name + "_conv1", filter=filter // 4)
+        conv1 = conv(data, name=name + "_conv1", filter=filter // 4, stride=stride, dilate=dilate)
+        bn1 = norm(data=conv1, name=name + "_bn1")
+        relu1 = relu(bn1, name=name + "_relu1")
 
-        bn2 = norm(data=conv1, name=name + "_bn2")
-        conv2 = reluconv(bn2, name=name + "_conv2", filter=filter // 4, kernel=3, stride=stride, dilate=dilate)
+        conv2 = conv(relu1, name=name + "_conv2", filter=filter // 4, kernel=3)
+        bn2 = norm(data=conv2, name=name + "_bn2")
+        relu2 = relu(bn2, name=name + "_relu2")
 
-        bn3 = norm(data=conv2, name=name + "_bn3")
-        conv3 = reluconv(bn3, name=name + "_conv3", filter=filter)
+        conv3 = conv(relu2, name=name + "_conv3", filter=filter)
+        bn3 = norm(data=conv3, name=name + "_bn3")
 
         if proj:
-            shortcut = conv(relu1, name=name + "_sc", filter=filter, stride=stride)
+            shortcut = conv(data, name=name + "_sc", filter=filter, stride=stride)
+            shortcut = norm(data=shortcut, name=name + "_sc_bn")
         else:
             shortcut = data
 
-        return add(conv3, shortcut, name=name + "_plus")
+        eltwise = add(bn3, shortcut, name=name + "_plus")
+
+        return relu(eltwise, name=name + "_relu")
 
     @classmethod
     def resnet_stage(cls, data, name, num_block, filter, stride, dilate, norm_type, norm_mom, ndev):
@@ -200,94 +204,19 @@ class Builder(object):
 
         return factory(depth, use_3x3_conv0, use_bn_preprocess, norm_type=normalizer, fp16=fp16)
 
-    def __getattr__(self, name):
-        """
-        Allow user specifing backbone as a string in the config file
-        backbone comes in 4 parts of format variant_network_last_norm-type, e.g. tusimple_resnet50_c4_fixbn
-        - variants can be tusimple, tornadomeet or msra
-        - networks can be resnetXXv2
-        - last can be c4, c5 or fpn
-        - norm type can be fixbn, localbn, syncbn or gn
-        :param name: backbone type
-        :return: symbol or a tuple of symbols(FPN)
-        """
-        print("get symbol {}".format(name))
 
-        parts = name.split("_")
-        if len(parts) == 4:
-            variant, network, last_layer, normalizer = parts
-        elif len(parts) == 5:
-            variant, network, last_layer, normalizer, dtype = parts
-        else:
-            raise KeyError("Unknown backbone type {}".format(name))
-
-        # parse variant
-        if variant == "tornadomeet":
-            use_bn_preprocess = True
-            use_3x3_conv0 = False
-        elif variant == "tusimple":
-            use_bn_preprocess = False
-            use_3x3_conv0 = True
-        elif variant == "msra":
-            use_bn_preprocess = False
-            use_3x3_conv0 = False
-        else:
-            raise KeyError("Unknown backbone variant {}".format(name))
-
-        # parse network
-        if network == "resnet50":
-            depth = 50
-        elif network == "resnet101":
-            depth = 101
-        elif network == "resnet152":
-            depth = 152
-        elif network == "resnet200":
-            depth = 200
-        else:
-            raise KeyError("Unknown backbone network {}".format(name))
-
-        # parse last layer
-        if last_layer == "c4":
-            factory = self.resnet_c4_factory
-        elif last_layer == "c5":
-            factory = self.resnet_c5_factory
-        elif last_layer == "c4c5":
-            factory = self.resnet_c4c5_factory
-        elif last_layer == "fpn":
-            factory = self.resnet_fpn_factory
-        else:
-            raise KeyError("Unknown backbone last layer {}".format(name))
-
-        # parse normalizer
-        if normalizer == "syncbn":
-            return lambda n: factory(depth, use_3x3_conv0, use_bn_preprocess, norm_type="sync", ndev=n)
-        elif normalizer == "fixbn":
-            norm_type = "fix"
-        elif normalizer == "gn":
-            norm_type = "gn"
-        else:
-            raise KeyError("Unknown backbone normalizer {}".format(name))
-
-        # parse dtype
-        if len(parts) == 5 and dtype == "fp16":
-            fp16 = True
-        else:
-            fp16 = False
-
-        return lambda: factory(depth, use_3x3_conv0, use_bn_preprocess, norm_type=norm_type, fp16=fp16)
-
-
-# TODO: hook import with ResNetV2Builder
+# TODO: hook import with ResNetV1Builder
 # import sys
-# sys.modules[__name__] = ResNetV2Builder()
+# sys.modules[__name__] = ResNetV1Builder()
 
 
 if __name__ == "__main__":
     #############################################################
-    # python -m mxnext.backbone.resnet_v2
+    # python -m mxnext.backbone.resnet_v1
     #############################################################
 
     h = Builder()
-    sym = getattr(h, "tornadomeet_resnet50_c5_syncbn_fp16")(8)
+    sym = h.get_backbone("msra", 50, "fpn", normalizer_factory(type="fixbn"), fp16=True)
     import mxnet as mx
-    # mx.viz.print_summary(sym)
+    sym = mx.sym.Group(sym)
+    mx.viz.print_summary(sym)
