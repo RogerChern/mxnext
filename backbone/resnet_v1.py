@@ -46,7 +46,7 @@ class Builder(object):
 
         if proj:
             shortcut = conv(data, name=name + "_sc", filter=filter, stride=stride)
-            soortcut = norm(data=shortcut, name=name + "_sc_bn")
+            shortcut = norm(data=shortcut, name=name + "_sc_bn")
         else:
             shortcut = data
 
