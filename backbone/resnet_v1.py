@@ -171,15 +171,8 @@ class Builder(object):
         return c4, c5
 
     @classmethod
-    def resnet_fpn_factory(cls, depth, use_3x3_conv0, use_bn_preprocess, norm_type="local", norm_mom=0.9, ndev=None):
-        num_c2_unit, num_c3_unit, num_c4_unit, num_c5_unit = cls.depth_config[depth]
-
-        data = var("data")
-        c1 = cls.resnet_c1(data, use_3x3_conv0, use_bn_preprocess, norm_type, norm_mom, ndev)
-        c2 = cls.resnet_c2(c1, num_c2_unit, 1, 1, norm_type, norm_mom, ndev)
-        c3 = cls.resnet_c3(c2, num_c3_unit, 2, 1, norm_type, norm_mom, ndev)
-        c4 = cls.resnet_c4(c3, num_c4_unit, 2, 1, norm_type, norm_mom, ndev)
-        c5 = cls.resnet_c5(c4, num_c5_unit, 2, 1, norm_type, norm_mom, ndev)
+    def resnet_fpn_factory(cls, depth, use_3x3_conv0, use_bn_preprocess, norm_type="local", norm_mom=0.9, ndev=None, fp16=False):
+        c1, c2, c3, c4, c5 = cls.resnet_factory(depth, use_3x3_conv0, use_bn_preprocess, norm_type, norm_mom, ndev, fp16)
 
         return c2, c3, c4, c5
 
@@ -223,6 +216,7 @@ if __name__ == "__main__":
     #############################################################
 
     h = Builder()
-    sym = getattr(h, "tornadomeet_resnet50_c5_syncbn_fp16")(8)
+    sym = h.get_backbone("msra", 50, "fpn", normalizer_factory(type="fixbn"), fp16=True)
     import mxnet as mx
-    # mx.viz.print_summary(sym)
+    sym = mx.sym.Group(sym)
+    mx.viz.print_summary(sym)
