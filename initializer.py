@@ -25,3 +25,6 @@ def one_init():
 
 def zero_init():
     return mx.init.Zero()
+
+def constant(val):
+    return mx.init.Constant(val)
