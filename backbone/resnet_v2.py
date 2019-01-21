@@ -145,6 +145,12 @@ class Builder(object):
         return c1, c2, c3, c4, c5
 
     @classmethod
+    def resnet_c3_factory(cls, depth, use_3x3_conv0, use_bn_preprocess, norm_type="local", norm_mom=0.9, ndev=None, fp16=False):
+        c1, c2, c3, c4, c5 = cls.resnet_factory(depth, use_3x3_conv0, use_bn_preprocess, norm_type, norm_mom, ndev, fp16)
+
+        return c3
+
+    @classmethod
     def resnet_c4_factory(cls, depth, use_3x3_conv0, use_bn_preprocess, norm_type="local", norm_mom=0.9, ndev=None, fp16=False):
         c1, c2, c3, c4, c5 = cls.resnet_factory(depth, use_3x3_conv0, use_bn_preprocess, norm_type, norm_mom, ndev, fp16)
 
@@ -195,6 +201,8 @@ class Builder(object):
             factory = self.resnet_c4c5_factory
         elif endpoint == "fpn":
             factory = self.resnet_fpn_factory
+        elif endpoint == "c3":
+            factory = self.resnet_c3_factory
         else:
             raise KeyError("Unknown backbone endpoint {}".format(endpoint))
 
