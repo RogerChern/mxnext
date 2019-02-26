@@ -282,6 +282,20 @@ def coin(prob, name):
     return result
 
 
+def bilinear_resize(data, name, scale, filter):
+    if scale == 1:
+        return data
+
+    return mx.sym.UpSampling(
+        data,
+        scale=scale,
+        num_filter=filter,
+        sample_type='bilinear',
+        name=name,
+        lr_mult=0,
+        wd_mult=0)
+
+
 def missing(*args, **kwargs):
     raise AttributeError("Your mxnet does not support this operator!")
 
