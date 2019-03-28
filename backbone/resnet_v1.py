@@ -157,16 +157,12 @@ class Builder(object):
     @classmethod
     def resnet_c5_factory(cls, depth, use_3x3_conv0, use_bn_preprocess, norm_type="local", norm_mom=0.9, ndev=None, fp16=False):
         c1, c2, c3, c4, c5 = cls.resnet_factory(depth, use_3x3_conv0, use_bn_preprocess, norm_type, norm_mom, ndev, fp16)
-        c5 = fixbn(c5, "bn1")
-        c5 = relu(c5)
 
         return c5
 
     @classmethod
     def resnet_c4c5_factory(cls, depth, use_3x3_conv0, use_bn_preprocess, norm_type="local", norm_mom=0.9, ndev=None, fp16=False):
         c1, c2, c3, c4, c5 = cls.resnet_factory(depth, use_3x3_conv0, use_bn_preprocess, norm_type, norm_mom, ndev, fp16)
-        c5 = fixbn(c5, "bn1")
-        c5 = relu(c5)
 
         return c4, c5
 

@@ -162,16 +162,12 @@ class Builder(object):
     @classmethod
     def resnext_c5_factory(cls, depth, use_3x3_conv0, use_bn_preprocess, num_group, norm_type="local", norm_mom=0.9, ndev=None, fp16=False):
         c1, c2, c3, c4, c5 = cls.resnext_factory(depth, use_3x3_conv0, use_bn_preprocess, num_group, norm_type, norm_mom, ndev, fp16)
-        c5 = fixbn(c5, "bn1")
-        c5 = relu(c5)
 
         return c5
 
     @classmethod
     def resnext_c4c5_factory(cls, depth, use_3x3_conv0, use_bn_preprocess, num_group, norm_type="local", norm_mom=0.9, ndev=None, fp16=False):
         c1, c2, c3, c4, c5 = cls.resnext_factory(depth, use_3x3_conv0, use_bn_preprocess, num_group, norm_type, norm_mom, ndev, fp16)
-        c5 = fixbn(c5, "bn1")
-        c5 = relu(c5)
 
         return c4, c5
 
