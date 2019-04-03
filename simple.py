@@ -386,7 +386,7 @@ def convrelu(data, name, filter, kernel=1, stride=1, pad=None, dilate=1, num_gro
 def convgnrelu(data, name, filter, kernel=1, stride=1, pad=None, dilate=1, num_group=1, no_bias=True, init=None,
                conv_lr_mult=1.0, conv_wd_mult=1.0, gn_lr_mult=1.0, gn_wd_mult=1.0, weight=None, bias=None):
     d1 = conv(data, name, filter, kernel, stride, pad, dilate, num_group, no_bias, init, conv_lr_mult, conv_wd_mult, weight, bias)
-    d2 = gn(d1, name + "_gn", lr_mult=gn_lr_mult, wd_mult=gn_wd_mult)
+    d2 = gn(d1, name=name + "_gn", lr_mult=gn_lr_mult, wd_mult=gn_wd_mult)
     d3 = relu(d2, name + "_relu")
     return d3
 
@@ -395,7 +395,7 @@ def convnormrelu(norm, data, name, filter, kernel=1, stride=1, pad=None, dilate=
                  conv_lr_mult=1.0, conv_wd_mult=1.0, norm_lr_mult=1.0, norm_wd_mult=1.0, weight=None, bias=None):
     d1 = conv(data, name, filter, kernel, stride, pad, dilate, num_group, no_bias, init, conv_lr_mult, conv_wd_mult, weight, bias)
     # _bn will be replaced by _in, _gn or _ibn accordingly
-    d2 = norm(d1, name + "_bn", lr_mult=norm_lr_mult, wd_mult=norm_wd_mult)
+    d2 = norm(d1, name=name + "_bn", lr_mult=norm_lr_mult, wd_mult=norm_wd_mult)
     d3 = relu(d2, name + "_relu")
     return d3
 
