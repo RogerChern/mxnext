@@ -39,7 +39,7 @@ class Custom(Initializer):
         self.arr = arr
 
     def _init_weight(self, _, arr):
-        val = mx.nd.array(arr)
+        val = mx.nd.array(self.arr)
         assert val.size == arr.size, "init shape {} is not compatible with weight shape {}".format(val.shape, arr.shape)
         arr[:] = val.reshape_like(arr)
 
