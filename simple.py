@@ -190,10 +190,7 @@ def pool(data, name, kernel=3, stride=2, pad=None,
          global_pool=False):
     if global_pool:
         assert pad is None
-        try:
-            sym = mx.sym.contrib.GAP(data, name=name)
-        except AttributeError:
-            sym = mx.sym.Pooling(data, name=name, kernel=(1, 1), pool_type="avg", global_pool=True)
+        sym = mx.sym.Pooling(data, name=name, kernel=(1, 1), pool_type="avg", global_pool=True)
         return sym
     else:
         if isinstance(kernel, int):
