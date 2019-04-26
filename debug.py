@@ -35,7 +35,7 @@ class DebugOperator(mx.operator.CustomOp):
     def forward(self, is_train, req, in_data, out_data, aux):
         if self.do_forward:
             aux[0] += 1
-            in_data_cpu = [aux[0].asscalar()] + [_.asnumpy() for _ in in_data]
+            in_data_cpu = [aux[0].context.device_id] + [aux[0].asscalar()] + [_.asnumpy() for _ in in_data]
             self.callback(*in_data_cpu)
 
         for o, r, i in zip(out_data, req, in_data):
@@ -44,7 +44,7 @@ class DebugOperator(mx.operator.CustomOp):
     def backward(self, req, out_grad, in_data, out_data, in_grad, aux):
         if self.do_backward:
             aux[0] += 1
-            out_grad_cpu = [aux[0].asscalar()] + [_.asnumpy() for _ in out_grad]
+            out_grad_cpu = [aux[0].context.device_id] + [aux[0].asscalar()] + [_.asnumpy() for _ in out_grad]
             self.callback(*out_grad_cpu)
 
         for i, r, o in zip(in_grad, req, out_grad):
