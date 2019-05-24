@@ -12,7 +12,7 @@ __all__ = ["normalizer_factory", "bn_count"]
 bn_count = [0]
 
 
-def normalizer_factory(type="local", ndev=None, eps=1e-5 + 1e-10, mom=0.9):
+def normalizer_factory(type="local", ndev=None, eps=1e-5 + 1e-10, mom=0.9, wd_mult=1.0):
     """
     :param type: one of "fix", "local", "sync"
     :param ndev:
@@ -26,7 +26,7 @@ def normalizer_factory(type="local", ndev=None, eps=1e-5 + 1e-10, mom=0.9):
 
     if type == "local" or type == "localbn":
         def local_bn(data, gamma=None, beta=None, moving_var=None, moving_mean=None,
-                     name=None, momentum=mom, lr_mult=1.0, wd_mult=1.0):
+                     name=None, momentum=mom, lr_mult=1.0, wd_mult=wd_mult):
             if name is None:
                 prev_name = data.name
                 name = prev_name + "_bn"
@@ -46,7 +46,7 @@ def normalizer_factory(type="local", ndev=None, eps=1e-5 + 1e-10, mom=0.9):
 
     elif type == "fix" or type == "fixbn":
         def fix_bn(data, gamma=None, beta=None, moving_var=None, moving_mean=None,
-                   name=None, lr_mult=1.0, wd_mult=1.0):
+                   name=None, lr_mult=1.0, wd_mult=wd_mult):
             if name is None:
                 prev_name = data.name
                 name = prev_name + "_bn"
@@ -67,7 +67,7 @@ def normalizer_factory(type="local", ndev=None, eps=1e-5 + 1e-10, mom=0.9):
         assert ndev is not None, "Specify ndev for sync bn"
 
         def sync_bn(data, gamma=None, beta=None, moving_var=None, moving_mean=None,
-                    name=None, momentum=mom, lr_mult=1.0, wd_mult=1.0):
+                    name=None, momentum=mom, lr_mult=1.0, wd_mult=wd_mult):
             bn_count[0] = bn_count[0] + 1
             if name is None:
                 prev_name = data.name
@@ -90,7 +90,7 @@ def normalizer_factory(type="local", ndev=None, eps=1e-5 + 1e-10, mom=0.9):
 
     elif type == "in":
         def in_(data, gamma=None, beta=None,
-                name=None, lr_mult=1.0, wd_mult=1.0):
+                name=None, lr_mult=1.0, wd_mult=wd_mult):
             if name is None:
                 prev_name = data.name
                 name = prev_name + "_in"
@@ -106,7 +106,7 @@ def normalizer_factory(type="local", ndev=None, eps=1e-5 + 1e-10, mom=0.9):
 
     elif type == "gn":
         def gn(data, gamma=None, beta=None,
-               name=None, lr_mult=1.0, wd_mult=1.0):
+               name=None, lr_mult=1.0, wd_mult=wd_mult):
             if name is None:
                 prev_name = data.name
                 name = prev_name + "_gn"
