@@ -46,7 +46,7 @@ class Builder(object):
 
         if proj:
             if not name.startswith("stage1"):
-                shortcut = avg_pool(data, stride=stride, pad=0, name=name + "_avgpool")
+                shortcut = avg_pool(data, stride=stride, pad=0, pooling_convention="full", name=name + "_avgpool")
             else:
                 shortcut = data
             shortcut = conv(shortcut, name=name + "_sc", filter=filter)
