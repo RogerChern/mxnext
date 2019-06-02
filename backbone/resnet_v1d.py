@@ -45,9 +45,12 @@ class Builder(object):
         bn3 = norm(data=conv3, name=name + "_bn3")
 
         if proj:
-            shortcut = avg_pool(data, name=name + "_avgpool")
+            if not name.startswith("stage1"):
+                shortcut = avg_pool(data, stride=stride, pad=0, name=name + "_avgpool")
+            else:
+                shortcut = data
             shortcut = conv(shortcut, name=name + "_sc", filter=filter)
-            shortcut = norm(data=shortcut, name=name + "_sc_bn")
+            shortcut = norm(shortcut, name=name + "_sc_bn")
         else:
             shortcut = data
 
@@ -98,11 +101,11 @@ class Builder(object):
 
         # C1
         if use_3x3_conv0:
-            data = conv(data, filter=64, kernel=3, stride=2, name="conv0_0")
+            data = conv(data, filter=32, kernel=3, stride=2, name="conv0_0")
             data = norm(data, name='bn0_0')
             data = relu(data, name='relu0_0')
 
-            data = conv(data, filter=64, kernel=3, name="conv0_1")
+            data = conv(data, filter=32, kernel=3, name="conv0_1")
             data = norm(data, name='bn0_1')
             data = relu(data, name='relu0_1')
 
