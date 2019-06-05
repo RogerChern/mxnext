@@ -308,10 +308,24 @@ try:
 except AttributeError:
     print("\033[91m" + "[Warning] Your mxnet does not support ProposalTarget" + "\033[0m")
 
-try:
-    decode_bbox = mx.sym.contrib.DecodeBBox
-except AttributeError:
-    print("\033[91m" + "[Warning] Your mxnet does not support DecodeBBox" + "\033[0m")
+from .tvm.decode_bbox import decode_bbox as _decode_bbox
+def decode_bbox(
+    rois, 
+    bbox_pred, 
+    im_info, 
+    bbox_mean, 
+    bbox_std, 
+    class_agnostic, 
+    name):
+
+    return _decode_bbox(
+        mx.sym, 
+        rois, 
+        bbox_pred, 
+        im_info, 
+        bbox_mean, 
+        bbox_std, 
+        class_agnostic)
 
 try:
     bbox_norm = mx.sym.contrib.BBoxNorm
