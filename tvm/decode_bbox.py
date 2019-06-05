@@ -1,5 +1,6 @@
-def _corner_to_center(F, x):
-    xmin, ymin, xmax, ymax = F.split(x, axis=-1, num_outputs=4)
+def _corner_to_center(F, boxes):
+    boxes = F.slice_axis(boxes, axis=-1, begin=-4, end=None)
+    xmin, ymin, xmax, ymax = F.split(boxes, axis=-1, num_outputs=4)
     width = xmax - xmin + 1
     height = ymax - ymin + 1
     x = xmin + (width - 1) * 0.5
