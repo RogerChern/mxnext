@@ -14,20 +14,20 @@ def proposal(cls_prob, bbox_pred, im_info, rpn_pre_nms_top_n, rpn_post_nms_top_n
 
 def _proposal(
     F=mx.ndarray,
-    cls_prob=None, 
-    bbox_pred=None, 
+    cls_prob=None,
+    bbox_pred=None,
     # anchors=None,
-    im_info=None, 
+    im_info=None,
     batch_size=1,
     max_side=-1,
-    rpn_pre_nms_top_n=None, 
-    rpn_post_nms_top_n=None, 
-    threshold=None, 
-    rpn_min_size=None, 
-    scales=None, 
-    ratios=None, 
-    feature_stride=None, 
-    output_score=None, 
+    rpn_pre_nms_top_n=None,
+    rpn_post_nms_top_n=None,
+    threshold=None,
+    rpn_min_size=None,
+    scales=None,
+    ratios=None,
+    feature_stride=None,
+    output_score=None,
     variant=None):
     """
     cls_prob: (#img, #anchor * 2, h, w) or (#img, #anchor, h, w)
@@ -35,8 +35,8 @@ def _proposal(
     im_info: (#img, 3), [valid_h, valid_w, scale]
 
     Returns:
-    proposal: (#img, #proposal, 5)
-    proposal_score: (#img, #proposal, 1) if output_score == True
+    proposal: (#img, #proposal, 4) or (#img * #proposal, 5)
+    proposal_score: (#img, #proposal, 1) or (#img * #proposal, 1)
     """
     ########### constant ##########
     num_anchor = len(scales) * len(ratios)
