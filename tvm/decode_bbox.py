@@ -15,6 +15,9 @@ def decode_bbox(F, anchors, deltas, im_infos, means, stds, class_agnostic):
     means: (4, ), [x, y, h, w]
     stds: (4, ), [x, y, h, w]
     class_agnostic: bool
+
+    Returns:
+    bbox: (#img, #roi, 4), [x1, y1, x2, y2]
     """
 
     # add roi axis, layout (img, roi, coord)
@@ -23,7 +26,7 @@ def decode_bbox(F, anchors, deltas, im_infos, means, stds, class_agnostic):
     if class_agnostic:
         # TODO: class_agnostic should predict only 1 class
         # class_agnostic predicts 2 classes
-        deltas = F.slice_axis(deltas, axis=-1, begin=4, end=None)
+        deltas = F.slice_axis(deltas, axis=-1, begin=-4, end=None)
     if not class_agnostic:
         # add class axis, layout (img, roi, cls, coord)
         deltas = F.reshape(deltas, [0, 0, -4, -1, 4])  # TODO: extend to multiple anchors

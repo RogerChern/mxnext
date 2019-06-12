@@ -2,13 +2,24 @@ from mxnext.tvm.decode_bbox import decode_bbox
 import mxnet as mx
 
 
-def proposal(
+def proposal(cls_prob, bbox_pred, im_info, rpn_pre_nms_top_n, rpn_post_nms_top_n,
+    threshold, scales, ratios, feature_stride, batch_size, max_side,
+    output_score=False, name=None, variant="tvm"):
+
+    return _proposal(F=mx.symbol, cls_prob=cls_prob, bbox_pred=bbox_pred, im_info=im_info,
+        batch_size=batch_size, max_side=max_side, rpn_pre_nms_top_n=rpn_pre_nms_top_n,
+        rpn_post_nms_top_n=rpn_post_nms_top_n, threshold=threshold, scales=scales,
+        ratios=ratios, feature_stride=feature_stride, output_score=output_score,
+        variant=variant)
+
+def _proposal(
     F=mx.ndarray,
     cls_prob=None, 
     bbox_pred=None, 
-    anchors=None,
+    # anchors=None,
     im_info=None, 
     batch_size=1,
+    max_side=-1,
     rpn_pre_nms_top_n=None, 
     rpn_post_nms_top_n=None, 
     threshold=None, 
@@ -17,7 +28,7 @@ def proposal(
     ratios=None, 
     feature_stride=None, 
     output_score=None, 
-    name=None):
+    variant=None):
     """
     cls_prob: (#img, #anchor * 2, h, w) or (#img, #anchor, h, w)
     bbox_pred: (#img, #anchor * 4, h, w)
@@ -27,12 +38,11 @@ def proposal(
     proposal: (#img, #proposal, 5)
     proposal_score: (#img, #proposal, 1) if output_score == True
     """
-    # constant
+    ########### constant ##########
     num_anchor = len(scales) * len(ratios)
-    max_side = 1200
     max_side = max_side // feature_stride
 
-    # meshgrid
+    ########### meshgrid ##########
     xx = F.arange(0, max_side).reshape([1, max_side])
     xx = F.broadcast_axis(xx, axis=0, size=max_side).reshape([1, 1, max_side, max_side])
     xx = F.slice_like(xx, cls_prob, axes=(2, 3))
@@ -42,14 +52,14 @@ def proposal(
     yy = F.slice_like(yy, cls_prob, axes=(2, 3))
     yy = F.broadcast_axis(yy, axis=0, size=batch_size).reshape([batch_size, -1])
 
-    # slice anchor
-    # anchors = F.var("anchor_stride%s" % feature_stride, shape=(1, 1, max_side, max_side, num_anchor * 4), dtype='float32') # (1, 1, long_side, long_side, #anchor * 4)
+    ########### slice anchor ##########
+    anchors = F.var("anchor_stride%s" % feature_stride, shape=(1, 1, max_side, max_side, num_anchor * 4), dtype='float32') # (1, 1, long_side, long_side, #anchor * 4)
     anchors = F.slice_like(anchors, cls_prob, axes=(2, 3))  # (1, 1, h, w, #anchor * 4)
     anchors = F.reshape(anchors, [-3, -2])  # (1, h, w, #anchor * 4), fold first two axes
     anchors = F.broadcast_axis(anchors, axis=0, size=batch_size)  # (#img, h, w, #anchor * 4)
     anchors = anchors.reshape([0, -1, 4])  # (#img, h * w * #anchor, 4)
 
-    # argsort
+    ########### argsort ##########
     cls_prob = F.slice_axis(cls_prob, axis=1, begin=-num_anchor, end=None)
     cls_prob = F.transpose(cls_prob, axes=[0, 2, 3, 1])  # (#img, h, w, #anchor)
     cls_prob = F.reshape(cls_prob, shape=[-1, num_anchor])
@@ -64,29 +74,43 @@ def proposal(
     arange_index = F.arange(0, batch_size).reshape([batch_size, 1])
     arange_index = F.broadcast_axis(arange_index, axis=1, size=rpn_pre_nms_top_n).reshape(-1)
     top_indexes = F.stack(arange_index, argsort_cls_prob.reshape(-1))
-    sort_cls_prob = F.gather_nd(cls_prob, top_indexes).reshape([-4, -1, rpn_pre_nms_top_n])  # (#img, #proposal)
+    sort_cls_prob = F.gather_nd(cls_prob, top_indexes).reshape([-4, -1, rpn_pre_nms_top_n, 1])  # (#img, #proposal, 1)
     sort_bbox_pred = F.gather_nd(bbox_pred, top_indexes).reshape([-4, -1, rpn_pre_nms_top_n, 4])  # (#img, #proposal, 4)
     sort_anchor = F.gather_nd(anchors, top_indexes).reshape([-4, -1, rpn_pre_nms_top_n, 4])  # (#img, #proposal, 4)
 
-    # decode
+    ########### decode ###########
     bbox = decode_bbox(F, sort_anchor, sort_bbox_pred, im_info, 
         (0, 0, 0, 0), (1, 1, 1, 1), True)
+    # return bbox, sort_cls_prob
 
-    # nms
-    score_bbox = F.concat(F.expand_dims(sort_cls_prob, axis=-1), bbox, dim=-1)
-    bbox = F.contrib.box_nms(score_bbox, overlap_thresh=threshold, coord_start=1, score_index=0)
+    ########### nms ############
+    # TVM only works for 6-tuple bbox, make it happy
+    # 6-tuple bbox is (class_id, score, x1, y1, x2, y2)
+    score_bbox = F.concat(F.zeros_like(sort_cls_prob), sort_cls_prob, bbox, dim=-1)
+    bbox = F.contrib.box_nms(score_bbox, overlap_thresh=threshold, id_index=0)
+    bbox_score = F.slice_axis(bbox, axis=-1, begin=1, end=2)
+    bbox_score = F.slice_axis(bbox_score, axis=1, begin=0, end=rpn_post_nms_top_n)
     bbox_coord = F.slice_axis(bbox, axis=-1, begin=-4, end=None)
     bbox_coord = F.slice_axis(bbox_coord, axis=1, begin=0, end=rpn_post_nms_top_n)
-    bbox_pad = F.broadcast_axis(F.slice_axis(bbox_coord, axis=1, begin=0, end=1), axis=1, size=rpn_post_nms_top_n)
-    bbox_coord = F.where(bbox_coord >= 0, bbox_coord, bbox_pad)
+    # bbox_pad = F.broadcast_axis(F.slice_axis(bbox_coord, axis=1, begin=0, end=1), axis=1, size=rpn_post_nms_top_n)
+    # bbox_coord = F.where(bbox_coord >= 0, bbox_coord, bbox_pad)
 
-    roi_index = F.arange(0, batch_size).reshape([batch_size, 1])
-    roi_index = F.broadcast_axis(roi_index,axis=1, size=rpn_post_nms_top_n)
-    roi_index = F.reshape(roi_index, [batch_size, rpn_post_nms_top_n, 1])
-    bbox_out = F.concat(roi_index, bbox_coord, dim=-1)
-    bbox_out = F.reshape(bbox_out, [-3, -2])
+    ################ formatting ##################
+    if variant == "simpledet":
+        pass
+    elif variant == "tvm":
+        roi_index = F.arange(0, batch_size).reshape([batch_size, 1, 1])
+        roi_index = F.broadcast_axis(roi_index, axis=1, size=rpn_post_nms_top_n)
+        bbox_coord = F.concat(roi_index, bbox_coord, dim=-1)
+        bbox_coord = F.reshape(bbox_coord, [-3, -2])
+        bbox_score = F.reshape(bbox_score, [-3, -2])
+    else:
+        raise ValueError("Unknown proposal variant: {}".format(variant))
 
-    return bbox_out, mx.sym.ones(1)
+    if output_score:
+        return bbox_coord, bbox_score
+    else:
+        return bbox_coord
 
 
 def test_meshgrid():
@@ -145,22 +169,19 @@ def test_proposal():
     all_anchor = grid[:, None, :] + base_anchor[None, :, :]
     all_anchor = all_anchor.reshape(1, 1, max_side // stride, max_side // stride, -1)
 
-    cls_prob = mx.nd.random_uniform(0, 1, shape=[1, len(aspects) * len(scales), feat_h, feat_w])
+    cls_prob = mx.nd.random_normal(0, 1, shape=[1, len(aspects) * len(scales), feat_h, feat_w])
     cls_prob = mx.nd.concat(mx.nd.zeros_like(cls_prob), cls_prob, dim=1)
     bbox_pred = mx.nd.random_normal(0, 0.1, shape=[1, len(aspects) * len(scales) * 4, feat_h, feat_w])
-    im_info = mx.nd.array([[1101, 701, 1.0]])
-    anchors = mx.nd.array(all_anchor)
+    im_info = mx.nd.array([[1111, 701, 1.0]])
+    anchors = mx.nd.array(all_anchor, dtype="float32")
 
     bbox1 = mx.nd.contrib.Proposal(
-        cls_prob, bbox_pred, im_info, 6000, 1000, 0.7, 0, scales, aspects, stride, False, False
+        cls_prob, bbox_pred, im_info, 10, 10, 0.01, 0, scales, aspects, stride, False, False
     )
-    bbox2 = proposal(mx.ndarray, cls_prob, bbox_pred, anchors, im_info, 1, 6000, 1000, 0.7, 0, scales, aspects, stride)
+    bbox2 = _proposal(mx.ndarray, cls_prob, bbox_pred, anchors, im_info, 1, 10, 10, 0.01, 0, scales, aspects, stride)
 
-    # print(bbox1 - bbox2[0])
-    print(np.where((bbox1 - bbox2[0]).asnumpy().sum(axis=1) != 0)[0][:100])
-    # print(bbox1[:10])
-    print(bbox1[957:957+10])
-    print(bbox2[0][957:957+10])
+    print(bbox1 - bbox2[0])
+
 
 if __name__ == "__main__":
     mx.random.seed(123)
