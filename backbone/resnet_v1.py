@@ -33,11 +33,11 @@ class Builder(object):
         """
         norm = normalizer_factory(type=norm_type, ndev=ndev, mom=norm_mom)
 
-        conv1 = conv(data, name=name + "_conv1", filter=filter // 4, stride=stride, dilate=dilate)
+        conv1 = conv(data, name=name + "_conv1", filter=filter // 4, stride=stride)
         bn1 = norm(data=conv1, name=name + "_bn1")
         relu1 = relu(bn1, name=name + "_relu1")
 
-        conv2 = conv(relu1, name=name + "_conv2", filter=filter // 4, kernel=3)
+        conv2 = conv(relu1, name=name + "_conv2", filter=filter // 4, kernel=3, dilate=dilate)
         bn2 = norm(data=conv2, name=name + "_bn2")
         relu2 = relu(bn2, name=name + "_relu2")
 
@@ -162,7 +162,16 @@ class Builder(object):
 
     @classmethod
     def resnet_c4c5_factory(cls, depth, use_3x3_conv0, use_bn_preprocess, norm_type="local", norm_mom=0.9, ndev=None, fp16=False):
-        c1, c2, c3, c4, c5 = cls.resnet_factory(depth, use_3x3_conv0, use_bn_preprocess, norm_type, norm_mom, ndev, fp16)
+        num_c2_unit, num_c3_unit, num_c4_unit, num_c5_unit = cls.depth_config[depth]
+
+        data = var("data")
+        if fp16:
+            data = to_fp16(data, "data_fp16")
+        c1 = cls.resnet_c1(data, use_3x3_conv0, use_bn_preprocess, norm_type, norm_mom, ndev)
+        c2 = cls.resnet_c2(c1, num_c2_unit, 1, 1, norm_type, norm_mom, ndev)
+        c3 = cls.resnet_c3(c2, num_c3_unit, 2, 1, norm_type, norm_mom, ndev)
+        c4 = cls.resnet_c4(c3, num_c4_unit, 2, 1, norm_type, norm_mom, ndev)
+        c5 = cls.resnet_c5(c4, num_c5_unit, 1, 2, norm_type, norm_mom, ndev)
 
         return c4, c5
 
