@@ -182,19 +182,6 @@ class Builder(object):
         return c2, c3, c4, c5
 
     def get_backbone(self, variant, depth, endpoint, normalizer, fp16):
-        # parse variant
-        if variant == "mxnet":
-            use_bn_preprocess = True
-            use_3x3_conv0 = False
-        elif variant == "tusimple":
-            use_bn_preprocess = False
-            use_3x3_conv0 = True
-        elif variant == "msra":
-            use_bn_preprocess = False
-            use_3x3_conv0 = False
-        else:
-            raise KeyError("Unknown backbone variant {}".format(variant))
-
         # parse endpoint
         if endpoint == "c4":
             factory = self.resnet_c4_factory
@@ -207,7 +194,7 @@ class Builder(object):
         else:
             raise KeyError("Unknown backbone endpoint {}".format(endpoint))
 
-        return factory(depth, use_3x3_conv0, use_bn_preprocess, norm_type=normalizer, fp16=fp16)
+        return factory(depth, False, False, norm_type=normalizer, fp16=fp16)
 
 
 # TODO: hook import with ResNetV1Builder
