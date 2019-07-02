@@ -73,7 +73,7 @@ def _proposal(
     argsort_cls_prob = F.slice_axis(argsort_cls_prob, axis=-1, begin=0, end=rpn_pre_nms_top_n)
     arange_index = F.arange(0, batch_size).reshape([batch_size, 1])
     arange_index = F.broadcast_axis(arange_index, axis=1, size=rpn_pre_nms_top_n).reshape(-1)
-    top_indexes = F.stack(arange_index, argsort_cls_prob.reshape(-1))
+    top_indexes = F.stack(arange_index, argsort_cls_prob.reshape(-1).astype("float32"))
     sort_cls_prob = F.gather_nd(cls_prob, top_indexes).reshape([-4, -1, rpn_pre_nms_top_n, 1])  # (#img, #proposal, 1)
     sort_bbox_pred = F.gather_nd(bbox_pred, top_indexes).reshape([-4, -1, rpn_pre_nms_top_n, 4])  # (#img, #proposal, 4)
     sort_anchor = F.gather_nd(anchors, top_indexes).reshape([-4, -1, rpn_pre_nms_top_n, 4])  # (#img, #proposal, 4)
