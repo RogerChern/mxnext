@@ -2,8 +2,8 @@ import mxnet as mx
 
 
 def _bbox_encode(F, ex_rois, gt_rois):
-    ex_x1, ex_y1, ex_x2, ex_y2 = F.split(ex_rois, num_outputs=4, axis=-1, squeeze_axis=True)
-    gt_x1, gt_y1, gt_x2, gt_y2 = F.split(gt_rois, num_outputs=4, axis=-1, squeeze_axis=True)
+    ex_x1, ex_y1, ex_x2, ex_y2 = F.split(ex_rois, num_outputs=4, axis=-1)
+    gt_x1, gt_y1, gt_x2, gt_y2 = F.split(gt_rois, num_outputs=4, axis=-1)
 
     ex_widths = ex_x2 - ex_x1 + 1.0
     ex_heights = ex_y2 - ex_y1 + 1.0
@@ -20,93 +20,115 @@ def _bbox_encode(F, ex_rois, gt_rois):
     targets_dw = F.log(gt_widths / ex_widths)
     targets_dh = F.log(gt_heights / ex_heights)
 
-    return F.stack(targets_dx, targets_dy, targets_dw, targets_dh, axis=1)
+    return F.concat(targets_dx, targets_dy, targets_dw, targets_dh, dim=-1)
 
 
-def _rpn_target_single_scale(F, features, anchors, gt_bboxes, num_image, num_anchor, max_side,
-    sample_per_image, fg_fraction, fg_thr, bg_thr):
+def _rpn_target_single_scale_batch(F, features, anchors, gt_bboxes, im_infos, num_image, num_anchor,
+    max_side, feature_stride, allowed_border, sample_per_image, fg_fraction, fg_thr, bg_thr):
     F = mx.ndarray
 
+    max_side = max_side // feature_stride
+
+    # prepare output
     anchors = F.slice_like(anchors, features, axes=(2, 3))  # (1, 1, h, w, #anchor * 4)
-    rpn_cls_label_list, rpn_reg_target_list, rpn_reg_weight_list = list(), list(), list()
+    anchors = anchors.reshape(-3, -2).reshape(0, 0, -1, 4)  # (1, h, w, #anchor, 4)
+    anchors = F.broadcast_axis(anchors, axis=0, size=num_image)  # (n, h, w, #anchor, 4)
+    cls_label_shape = F.slice_axis(anchors, axis=-1, begin=0, end=1).reshape(num_image, -1)  # (n, h * w * #anchor)
+    rpn_cls_label = F.ones_like(cls_label_shape) * -1  # -1 for ignore
+
+    # prepare anchor, gt, valid
+    anchors = F.reshape(anchors, shape=(num_image, -1, 4))  # (n, h * w * #anchor, 4)
+    gt_bboxes  # (n, #gt, 4)
+    im_infos  # (n, 3)
+    h, w, _ = F.split(im_infos, num_outputs=3, axis=-1)  # (n, 1)
+    x1, y1, x2, y2 = F.split(anchors, num_outputs=4, axis=-1, squeeze_axis=True)  # (n, h * w * #anchor)
+    valid = (x1 >= -allowed_border) * \
+            F.broadcast_lesser(x2, w + allowed_border) * \
+            (y1 >= -allowed_border) * \
+            F.broadcast_lesser(y2, h + allowed_border)  # (n, h * w * #anchor)
+
+    ######################## assgining #######################
+    iou_a2gt_list = list()
     for i in range(num_image):
-        # prepare output
-        anchors = anchors.reshape(-3, -2).reshape(-3, -2).reshape(0, 0, -1, 4)  # (h, w, #anchor, 4)
-        output_shape_this = F.slice_axis(anchors, axis=-1, begin=0, end=1).reshape(-1)  # (h * w * #anchor, )
-        rpn_cls_label = F.ones_like(output_shape_this) * -1  # -1 for ignore
+        anchors_this = F.slice_axis(anchors, axis=0, begin=i, end=i+1).reshape(-1, 4)
+        gt_bboxes_this = F.slice_axis(gt_bboxes, axis=0, begin=i, end=i+1).reshape(-1, 4)
+        iou_a2gt_this = F.contrib.box_iou(anchors_this, gt_bboxes_this, format="corner")  # (h * w * #anchor, #gt)
+        iou_a2gt_list.append(iou_a2gt_this)
+    iou_a2gt = F.stack(*iou_a2gt_list, axis=0)  # (n, h * w * #anchor, #gt)
+    matched_gt_idx = F.argmax(iou_a2gt, axis=-1)  # (n, h * w * #anchor)
+    max_iou_a = F.max(iou_a2gt, axis=-1)  # (n, h * w * #anchor)
+    max_iou_gt = F.max(iou_a2gt, axis=-2) # (n, #gt)
 
-        # prepare anchor, gt
-        anchors = F.reshape(anchors, shape=(-1, 4))  # (h * w * #anchor, 4)
-        gt_bboxes_this = F.slice_axis(gt_bboxes, axis=0, begin=i, end=i+1).reshape(-1, 4)  # (#gt, 4)
+    # choose anchors with IoU < bg_thr
+    matched = max_iou_a < bg_thr
+    rpn_cls_label = F.where(matched * valid, F.zeros_like(rpn_cls_label), rpn_cls_label)
 
-        ######################## assgining #######################
-        iou_a2gt = F.contrib.box_iou(anchors, gt_bboxes_this, format="corner")  # (h * w * #anchor, #gt)
-        matched_gt = F.argmax(iou_a2gt, axis=1)  # (h * w * #anchor,)
-        max_iou_a = F.max(iou_a2gt, axis=1)  # (h * w * #anchor,)
-        max_iou_gt = F.max(iou_a2gt, axis=0) # (#gt, )
+    # choose anchors with max IoU to gts
+    max_iou_gt = F.expand_dims(max_iou_gt, axis=1)  # (n, 1, #gt)
+    matched = F.broadcast_equal(iou_a2gt, max_iou_gt) * (iou_a2gt > 0)  # (n, h * w * #anchor, #gt)
+    matched = F.sum(matched, axis=-1)  # (n, h * w * #anchor)
+    matched = matched > 0
+    rpn_cls_label = F.where(matched * valid, F.ones_like(rpn_cls_label), rpn_cls_label)
 
-        # choose anchors with max IoU to gts
-        matched = F.broadcast_equal(iou_a2gt, max_iou_gt)  # (h * w * #anchor, #gt)
-        matched = F.sum(matched, axis=1)  # (h * w * #anchor,)
-        matched = matched > 0
-        rpn_cls_label = F.where(matched, F.ones_like(rpn_cls_label), rpn_cls_label)
+    # choose anchors with IoU >= fg_thr
+    matched = max_iou_a >= fg_thr
+    rpn_cls_label = F.where(matched * valid, F.ones_like(rpn_cls_label), rpn_cls_label)
 
-        # choose anchors with IoU >= fg_thr
-        matched = max_iou_a >= fg_thr
-        rpn_cls_label = F.where(matched, F.ones_like(rpn_cls_label), rpn_cls_label)
+    ######################## sampling ##########################
+    # rpn_cls_label is 1 for fg, 0 for bg and -1 for ignore
+    ############################################################
 
-        # choose anchors with IoU < bg_thr
-        matched = max_iou_a < bg_thr
-        rpn_cls_label = F.where(matched, F.zeros_like(rpn_cls_label), rpn_cls_label)
+    # simulate random sampling by add a random number [0, 0.5] to each label and sort
+    randp = F.random.uniform(0, 0.5, shape=(num_image, max_side ** 2 * num_anchor))
+    randp = F.slice_like(randp, rpn_cls_label)
+    rpn_cls_label_p = rpn_cls_label + randp
 
-        ######################## sampling ##########################
-        # rpn_cls_label is 1 for fg, 0 for bg and -1 for ignore
-        ############################################################
+    # filter out excessive fg samples
+    fg_value = F.topk(rpn_cls_label_p, k=int(sample_per_image * fg_fraction), ret_typ='value')
+    sentinel_value = F.slice_axis(fg_value, axis=-1, begin=-1, end=None)  # (n, 1)
+    matched = rpn_cls_label_p >= 1
+    matched = matched * F.broadcast_lesser(rpn_cls_label_p, sentinel_value)
+    rpn_cls_label = F.where(matched, F.ones_like(rpn_cls_label) * -1, rpn_cls_label)
 
-        # simulate random sampling by add a random number [0, 0.5] to each label and sort
-        randp = F.random.uniform(0, 0.5, shape=(max_side ** 2 * num_anchor, ))
-        randp = F.slice_like(randp, rpn_cls_label)
-        rpn_cls_label_p = rpn_cls_label + randp
+    # filter out excessive bg samples
+    matched = rpn_cls_label_p < 1
+    rpn_cls_label_p = F.where(matched, rpn_cls_label_p + 3, rpn_cls_label_p)
+    # now [3, 3.5] for bg, [2, 2.5] for ignore and [1, 1.5] for fg
+    fg_value = F.topk(rpn_cls_label_p, k=sample_per_image - int(sample_per_image * fg_fraction), ret_typ='value')
+    sentinel_value = F.slice_axis(fg_value, axis=-1, begin=-1, end=None)  # (n, 1)
+    matched = rpn_cls_label_p >= 3
+    matched = matched * F.broadcast_lesser(rpn_cls_label_p, sentinel_value)
+    # rpn_cls_label = F.where(matched, F.ones_like(rpn_cls_label) * -1, rpn_cls_label)
 
-        # filter out excessive fg samples
-        fg_value = F.topk(rpn_cls_label_p, k=int(sample_per_image * fg_fraction), ret_typ='value')
-        sentinel_value = F.slice_axis(fg_value, axis=0, begin=-1, end=None)  # (1, )
-        matched = rpn_cls_label_p >= 1
-        matched = matched * F.broadcast_lesser(rpn_cls_label_p, sentinel_value)
-        rpn_cls_label = F.where(matched, F.ones_like(rpn_cls_label) * -1, rpn_cls_label)
+    # regression target
+    matched = (rpn_cls_label == 1).reshape(-1)
+    ones = F.ones_like(anchors).reshape(-1, 4)
+    zeros = F.zeros_like(anchors).reshape(-1, 4)
+    rpn_reg_weight = F.where(matched, ones, zeros)
 
-        # filter out excessive bg samples
-        matched = rpn_cls_label_p < 1
-        rpn_cls_label_p = F.where(matched, rpn_cls_label_p + 3, rpn_cls_label_p)
-        # now [3, 3.5] for bg, [2, 2.5] for ignore and [1, 1.5] for fg
-        fg_value = F.topk(rpn_cls_label_p, k=int(sample_per_image * fg_fraction), ret_typ='value')
-        sentinel_value = F.slice_axis(fg_value, axis=0, begin=-1, end=None)  # (1, )
-        matched = rpn_cls_label_p >= 3
-        matched = matched * F.broadcast_lesser(rpn_cls_label_p, sentinel_value)
-        rpn_cls_label = F.where(matched, F.ones_like(rpn_cls_label) * -1, rpn_cls_label)
+    # get matched gt box
+    matched_gt_box_list = list()
+    for i in range(num_image):
+        matched_gt_idx_this = F.slice_axis(matched_gt_idx, axis=0, begin=i, end=i+1).reshape(-1)
+        gt_bboxes_this = F.slice_axis(gt_bboxes, axis=0, begin=i, end=i+1).reshape(-1, 4)
+        matched_gt_box_list.append(F.take(gt_bboxes_this, matched_gt_idx_this))
+    matched_gt_box = F.stack(*matched_gt_box_list, axis=0)
+    rpn_reg_target = _bbox_encode(F, anchors, matched_gt_box)
 
-        # regression target
-        rpn_reg_weight = F.where(rpn_cls_label == 1, F.ones_like(anchors), F.zeros_like(anchors))
-        rpn_reg_target = _bbox_encode(F, anchors, F.take(gt_bboxes_this, matched_gt))
+    # reshape output
+    rpn_cls_label = F.reshape(rpn_cls_label, shape=(num_image, -1, num_anchor))
+    rpn_cls_label = F.reshape_like(rpn_cls_label, features, lhs_begin=1, lhs_end=2, rhs_begin=2, rhs_end=4)
+    rpn_cls_label = F.transpose(rpn_cls_label, axes=(0, 3, 1, 2)).reshape(num_image, -1)
 
-        # reshape output
-        rpn_cls_label = F.reshape(rpn_cls_label, shape=(-1, num_anchor))
-        rpn_cls_label = F.reshape_like(rpn_cls_label, features, lhs_begin=0, lhs_end=1, rhs_begin=2, rhs_end=4)
-        rpn_cls_label = F.transpose(rpn_cls_label, axes=(2, 0, 1)).reshape(-1)
+    rpn_reg_target = F.reshape(rpn_reg_target, shape=(num_image, -1, num_anchor * 4))
+    rpn_reg_target = F.reshape_like(rpn_reg_target, features, lhs_begin=1, lhs_end=2, rhs_begin=2, rhs_end=4)
+    rpn_reg_target = F.transpose(rpn_reg_target, axes=(0, 3, 1, 2))
 
-        rpn_reg_target = F.reshape(rpn_reg_target, shape=(-1, num_anchor * 4))
-        rpn_reg_target = F.reshape_like(rpn_reg_target, features, lhs_begin=0, lhs_end=1, rhs_begin=2, rhs_end=4)
-        rpn_reg_target = F.transpose(rpn_reg_target, axes=(2, 0, 1))
+    rpn_reg_weight = F.reshape(rpn_reg_weight, shape=(num_image, -1, num_anchor * 4))
+    rpn_reg_weight = F.reshape_like(rpn_reg_weight, features, lhs_begin=1, lhs_end=2, rhs_begin=2, rhs_end=4)
+    rpn_reg_weight = F.transpose(rpn_reg_weight, axes=(0, 3, 1, 2))
 
-        rpn_reg_weight = F.reshape(rpn_reg_weight, shape=(-1, num_anchor * 4))
-        rpn_reg_weight = F.reshape_like(rpn_reg_weight, features, lhs_begin=0, lhs_end=1, rhs_begin=2, rhs_end=4)
-        rpn_reg_weight = F.transpose(rpn_reg_weight, axes=(2, 0, 1))
-
-        rpn_cls_label_list.append(rpn_cls_label)
-        rpn_reg_target_list.append(rpn_reg_target)
-        rpn_reg_weight_list.append(rpn_reg_weight)
-
-    return rpn_cls_label_list, rpn_reg_target_list, rpn_reg_weight_list
+    return rpn_cls_label, rpn_reg_target, rpn_reg_weight
 
 
 def test_rpn_target():
@@ -148,15 +170,19 @@ def test_rpn_target():
     gt_bboxes = mx.nd.array(
         [[200, 200, 300, 300],
          [300, 300, 500, 500],
-         [-1, -1, -1, -1]]).reshape(1, 2, 4)
-    im_info = mx.nd.array([1200, 800, 2])
+         [-1, -1, -1, -1],
+         [200, 200, 300, 300],
+         [400, 300, 500, 500],
+         [-1, -1, -1, -1],
+         ]).reshape(2, 3, 4)
+    im_infos = mx.nd.array([[1200, 800, 2], [1200, 800, 2]]).reshape(2, 3)
 
-    rpn_cls_label, rpn_reg_target, rpn_reg_weight = _rpn_target_single_scale(mx.ndarray, cls_prob,
-        anchors, gt_bboxes, 1, 15, max_side // stride, 256, 0.5, 0.7, 0.3)
-    # _rpn_target_single_scale(mx.ndarray, cls_prob, anchors, gt_bboxes, 1, 15, max_side // stride, 256, 0.5, 0.7, 0.3)
-    print(np.where(rpn_cls_label[0].asnumpy() > 0))
-    print(np.where(rpn_reg_weight[0].asnumpy() > 0))
-    print(rpn_reg_target[0][np.where(rpn_reg_weight[0].asnumpy() > 0)])
+    rpn_cls_label, rpn_reg_target, rpn_reg_weight = _rpn_target_single_scale_batch(mx.ndarray, cls_prob,
+        anchors, gt_bboxes, im_infos, 2, 15, max_side, stride, 0, 256, 0.5, 0.7, 0.3)
+    print(len(np.where(rpn_cls_label[1].asnumpy() == 0)[0]))
+    print(np.where(rpn_cls_label[1].asnumpy() > 0))
+    print(np.where(rpn_reg_weight[1].asnumpy() > 0))
+    print(rpn_reg_target[1][np.where(rpn_reg_weight[1].asnumpy() > 0)])
 
     from core.detection_input import AnchorTarget2D
     class AnchorTarget2DParam:
@@ -179,8 +205,9 @@ def test_rpn_target():
 
     anchor_target = AnchorTarget2D(AnchorTarget2DParam)
 
-    record = {"im_info": im_info.asnumpy(), "gt_bbox": gt_bboxes.asnumpy()[0]}
+    record = {"im_info": im_infos.asnumpy()[1], "gt_bbox": gt_bboxes.asnumpy()[1]}
     anchor_target.apply(record)
+    print(len(np.where(record["rpn_cls_label"] == 0)[0]))
     print(np.where(record["rpn_cls_label"] > 0))
     print(np.where(record["rpn_reg_weight"] > 0))
     print(record["rpn_reg_target"][np.where(record["rpn_reg_weight"] > 0)])
