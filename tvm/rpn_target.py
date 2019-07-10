@@ -35,10 +35,10 @@ def _fpn_rpn_target_batch(F, feat_list, anchor_list, gt_bboxes, im_infos, num_im
         anchors = F.slice_like(anchors, features, axes=(2, 3))  # (1, 1, h, w, #anchor * 4)
         anchors = F.reshape(anchors, shape=(1, -1, num_anchor, 4))  # (1, h * w, #anchor, 4)
         anchors = F.transpose(anchors, (0, 2, 1, 3))  # (1, #anchor, h * w, 4)
-        anchors = F.reshape(anchors, shape=(0, -3, -2))
         lvl_anchors.append(anchors)
-    anchors = F.concat(*lvl_anchors, dim=1)  # (1, #anchor * h' * w', 4)
-    anchors = F.broadcast_axis(anchors, axis=0, size=num_image)  # (n, h * w * #anchor, 4), save ' for clarity
+    anchors = F.concat(*lvl_anchors, dim=2)  # (1, #anchor, h' * w', 4)
+    anchors = F.broadcast_axis(anchors, axis=0, size=num_image)  # (n, #anchor, h' * w', 4)
+    anchors = F.reshape(anchors, shape=(0, -3, -2))  # (n, #anchor * h' * w', 4)
 
     # prepare output
     cls_label_shape = F.slice_axis(anchors, axis=-1, begin=0, end=1).reshape([num_image, -1])  # (n, h * w * #anchor)
@@ -336,5 +336,121 @@ def test_rpn_target():
     print(np.where(record["rpn_reg_weight"] > 0))
     print(record["rpn_reg_target"][np.where(record["rpn_reg_weight"] > 0)])
 
+
+    class AnchorTarget2DParam:
+        def __init__(self):
+            self.generate = self._generate()
+
+        class _generate:
+            def __init__(self):
+                self.stride = (4, 8, 16, 32, 64)
+                self.short = (200, 100, 50, 25, 13)
+                self.long = (334, 167, 84, 42, 21)
+            scales = (8)
+            aspects = (0.5, 1.0, 2.0)
+
+        class assign:
+            allowed_border = 0
+            pos_thr = 0.7
+            neg_thr = 0.3
+            min_pos_thr = 0.0
+
+        class sample:
+            image_anchor = 256
+            pos_fraction = 0.5
+
+
+def test_fpn_rpn_target():
+    import numpy as np
+
+    # anchor generation
+    strides = (4, 8, 16, 32, 64)
+    aspects = (0.5, 1.0, 2.0)
+    scales = (8, )
+    max_side = 1400
+    feat_hs = (334, 167, 84, 42, 21)
+    feat_ws = (200, 100, 50, 25, 13)
+
+    anchor_list = []
+    feat_list = []
+    for stride, feat_h, feat_w in zip(strides, feat_hs, feat_ws):
+        base_anchor = np.array([0, 0, stride - 1, stride - 1])
+        w = base_anchor[2] - base_anchor[0] + 1
+        h = base_anchor[3] - base_anchor[1] + 1
+        x_ctr = base_anchor[0] + 0.5 * (w - 1)
+        y_ctr = base_anchor[1] + 0.5 * (h - 1)
+        w_ratios = np.round(np.sqrt(w * h / aspects))
+        h_ratios = np.round(w_ratios * aspects)
+        ws = (np.outer(w_ratios, scales)).reshape(-1)
+        hs = (np.outer(h_ratios, scales)).reshape(-1)
+        base_anchor = np.stack(
+            [x_ctr - 0.5 * (ws - 1),
+            y_ctr - 0.5 * (hs - 1),
+            x_ctr + 0.5 * (ws - 1),
+            y_ctr + 0.5 * (hs - 1)],
+            axis=1)
+
+        shift_x = np.arange(0, max_side // stride, dtype=np.float32) * stride
+        shift_y = np.arange(0, max_side // stride, dtype=np.float32) * stride
+        grid_x, grid_y = np.meshgrid(shift_x, shift_y)
+        grid_x, grid_y = grid_x.reshape(-1), grid_y.reshape(-1)
+        grid = np.stack([grid_x, grid_y, grid_x, grid_y], axis=1)
+        all_anchor = grid[:, None, :] + base_anchor[None, :, :]
+        all_anchor = all_anchor.reshape(1, 1, max_side // stride, max_side // stride, -1)
+        anchors = mx.nd.array(all_anchor, dtype="float32")
+        cls_prob = mx.nd.random_normal(0, 1, shape=[1, len(aspects) * len(scales), feat_h, feat_w])
+        anchor_list.append(anchors)
+        feat_list.append(cls_prob)
+
+    gt_bboxes = mx.nd.array(
+            [[200, 200, 300, 300],
+            [300, 300, 500, 500],
+            [-1, -1, -1, -1],
+            [200, 200, 300, 300],
+            [300, 300, 500, 500],
+            [-1, -1, -1, -1],
+            ]).reshape(2, 3, 4)
+    im_infos = mx.nd.array([[1333, 800, 2], [1333, 800, 2]]).reshape(2, 3)
+
+    rpn_cls_label, rpn_reg_target, rpn_reg_weight = _fpn_rpn_target_batch(mx.ndarray, feat_list,
+        anchor_list, gt_bboxes, im_infos, 2, 3, max_side, strides, 0, 256, 0.5, 0.7, 0.3)
+    print(len(np.where(rpn_cls_label[0].asnumpy() == 0)[0]))
+    print(np.where(rpn_cls_label[0].asnumpy() > 0))
+    print(np.where(rpn_reg_weight[0].asnumpy() > 0))
+    print(rpn_reg_target[0][np.where(rpn_reg_weight[0].asnumpy() > 0)])
+
+    class AnchorTarget2DParam:
+        def __init__(self):
+            self.generate = self._generate()
+
+        class _generate:
+            def __init__(self):
+                self.stride = (4, 8, 16, 32, 64)
+                self.short = (200, 100, 50, 25, 13)
+                self.long = (334, 167, 84, 42, 21)
+            scales = (8, )
+            aspects = (0.5, 1.0, 2.0)
+
+        class assign:
+            allowed_border = 0
+            pos_thr = 0.7
+            neg_thr = 0.3
+            min_pos_thr = 0.0
+
+        class sample:
+            image_anchor = 256
+            pos_fraction = 0.5
+
+    from models.FPN.input import PyramidAnchorTarget2D
+    anchor_target = PyramidAnchorTarget2D(AnchorTarget2DParam())
+
+    record = {"im_info": im_infos.asnumpy()[1], "gt_bbox": gt_bboxes.asnumpy()[1]}
+    anchor_target.apply(record)
+    print(len(np.where(record["rpn_cls_label"] == 0)[0]))
+    print(np.where(record["rpn_cls_label"] > 0))
+    print(np.where(record["rpn_reg_weight"] > 0))
+    print(record["rpn_reg_target"][np.where(record["rpn_reg_weight"] > 0)])
+
+
 if __name__ == "__main__":
-    test_rpn_target()
+    test_fpn_rpn_target()
