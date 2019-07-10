@@ -2,21 +2,21 @@ from mxnext.tvm.decode_bbox import decode_bbox
 import mxnet as mx
 
 
-def proposal(cls_prob, bbox_pred, im_info, rpn_pre_nms_top_n, rpn_post_nms_top_n,
+def proposal(cls_prob, bbox_pred, im_info, anchors, rpn_pre_nms_top_n, rpn_post_nms_top_n,
     threshold, scales, ratios, feature_stride, batch_size, max_side,
     output_score=False, name=None, variant="tvm"):
 
-    return _proposal(F=mx.symbol, cls_prob=cls_prob, bbox_pred=bbox_pred, im_info=im_info,
-        batch_size=batch_size, max_side=max_side, rpn_pre_nms_top_n=rpn_pre_nms_top_n,
-        rpn_post_nms_top_n=rpn_post_nms_top_n, threshold=threshold, scales=scales,
-        ratios=ratios, feature_stride=feature_stride, output_score=output_score,
-        variant=variant)
+    return _proposal(F=mx.symbol, cls_prob=cls_prob, bbox_pred=bbox_pred,
+        im_info=im_info, anchors=anchors, batch_size=batch_size, max_side=max_side,
+        rpn_pre_nms_top_n=rpn_pre_nms_top_n, rpn_post_nms_top_n=rpn_post_nms_top_n,
+        threshold=threshold, scales=scales, ratios=ratios, feature_stride=feature_stride,
+        output_score=output_score, variant=variant)
 
 def _proposal(
     F=mx.ndarray,
     cls_prob=None,
     bbox_pred=None,
-    # anchors=None,
+    anchors=None,
     im_info=None,
     batch_size=1,
     max_side=-1,
@@ -53,7 +53,6 @@ def _proposal(
     yy = F.broadcast_axis(yy, axis=0, size=batch_size).reshape([batch_size, -1])
 
     ########### slice anchor ##########
-    anchors = F.var("anchor_stride%s" % feature_stride, shape=(1, 1, max_side, max_side, num_anchor * 4), dtype='float32') # (1, 1, long_side, long_side, #anchor * 4)
     anchors = F.slice_like(anchors, cls_prob, axes=(2, 3))  # (1, 1, h, w, #anchor * 4)
     anchors = F.reshape(anchors, [-3, -2])  # (1, h, w, #anchor * 4), fold first two axes
     anchors = F.broadcast_axis(anchors, axis=0, size=batch_size)  # (#img, h, w, #anchor * 4)
@@ -79,7 +78,7 @@ def _proposal(
     sort_anchor = F.gather_nd(anchors, top_indexes).reshape([-4, -1, rpn_pre_nms_top_n, 4])  # (#img, #proposal, 4)
 
     ########### decode ###########
-    bbox = decode_bbox(F, sort_anchor, sort_bbox_pred, im_info, 
+    bbox = decode_bbox(F, sort_anchor, sort_bbox_pred, im_info,
         (0, 0, 0, 0), (1, 1, 1, 1), True)
     # return bbox, sort_cls_prob
 
@@ -178,12 +177,17 @@ def test_proposal():
     bbox1 = mx.nd.contrib.Proposal(
         cls_prob, bbox_pred, im_info, 10, 10, 0.01, 0, scales, aspects, stride, False, False
     )
-    bbox2 = _proposal(mx.ndarray, cls_prob, bbox_pred, anchors, im_info, 1, 10, 10, 0.01, 0, scales, aspects, stride)
+    print(bbox1)
+    bbox2 = _proposal(F=mx.ndarray, cls_prob=cls_prob, bbox_pred=bbox_pred, anchors=anchors,
+        im_info=im_info, batch_size=1, max_side=max_side, rpn_pre_nms_top_n=10, rpn_post_nms_top_n=10,
+        threshold=0.01, rpn_min_size=0, scales=scales, ratios=aspects, feature_stride=stride,
+        variant="tvm")
+    print(bbox2)
 
-    print(bbox1 - bbox2[0])
+    # print(bbox1 - bbox2[0])
 
 
 if __name__ == "__main__":
     mx.random.seed(123)
-    
+
     test_proposal()
