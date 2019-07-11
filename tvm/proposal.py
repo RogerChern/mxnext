@@ -6,11 +6,12 @@ def proposal(cls_prob, bbox_pred, im_info, anchors, rpn_pre_nms_top_n, rpn_post_
     threshold, scales, ratios, feature_stride, batch_size, max_side,
     output_score=False, name=None, variant="tvm"):
 
-    return _proposal(F=mx.symbol, cls_prob=cls_prob, bbox_pred=bbox_pred,
-        im_info=im_info, anchors=anchors, batch_size=batch_size, max_side=max_side,
-        rpn_pre_nms_top_n=rpn_pre_nms_top_n, rpn_post_nms_top_n=rpn_post_nms_top_n,
-        threshold=threshold, scales=scales, ratios=ratios, feature_stride=feature_stride,
-        output_score=output_score, variant=variant)
+    with mx.name.Prefix("proposal: "):
+        return _proposal(F=mx.symbol, cls_prob=cls_prob, bbox_pred=bbox_pred,
+            im_info=im_info, anchors=anchors, batch_size=batch_size, max_side=max_side,
+            rpn_pre_nms_top_n=rpn_pre_nms_top_n, rpn_post_nms_top_n=rpn_post_nms_top_n,
+            threshold=threshold, scales=scales, ratios=ratios, feature_stride=feature_stride,
+            output_score=output_score, variant=variant)
 
 def _proposal(
     F=mx.ndarray,
