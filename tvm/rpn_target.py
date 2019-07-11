@@ -113,7 +113,7 @@ def _fpn_rpn_target_batch(F, feat_list, anchor_list, gt_bboxes, im_infos, num_im
         randint = F.random.randint(0, sample_per_image, shape=(num_image, max_side ** 2 * num_anchor))
         randint = F.slice_like(randint, matched)
         randint = randint.astype("float32") * matched
-        matched = F.where(F.broadcast_greater(randint, sample_per_image - num_pos), matched, F.zeros_like(matched))
+        matched = F.where(F.broadcast_lesser(randint, num_pos), matched, F.zeros_like(matched))
         rpn_cls_label = F.where(matched, F.ones_like(rpn_cls_label) * -1, rpn_cls_label)
 
         # regression target
