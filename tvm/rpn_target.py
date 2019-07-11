@@ -97,15 +97,23 @@ def _fpn_rpn_target_batch(F, feat_list, anchor_list, gt_bboxes, im_infos, num_im
         matched = rpn_cls_label_p >= 1
         matched = matched * F.broadcast_lesser(rpn_cls_label_p, sentinel_value)
         rpn_cls_label = F.where(matched, F.ones_like(rpn_cls_label) * -1, rpn_cls_label)
+        num_pos = (rpn_cls_label == 1).sum(axis=-1, keepdims=True)  # (n, 1)
 
         # filter out excessive bg samples
         matched = rpn_cls_label_p < 1
         rpn_cls_label_p = F.where(matched, rpn_cls_label_p + 3, rpn_cls_label_p)
         # now [3, 3.5] for bg, [2, 2.5] for ignore and [1, 1.5] for fg
-        fg_value = F.topk(rpn_cls_label_p, k=sample_per_image - int(sample_per_image * fg_fraction), ret_typ='value')
-        sentinel_value = F.slice_axis(fg_value, axis=-1, begin=-1, end=None)  # (n, 1)
+        bg_value = F.topk(rpn_cls_label_p, k=sample_per_image, ret_typ='value')
+        sentinel_value = F.slice_axis(bg_value, axis=-1, begin=-1, end=None)  # (n, 1)
         matched = rpn_cls_label_p >= 3
         matched = matched * F.broadcast_lesser(rpn_cls_label_p, sentinel_value)
+        rpn_cls_label = F.where(matched, F.ones_like(rpn_cls_label) * -1, rpn_cls_label)
+        # simulate num_bg = sample_per_image - num_fg by removing samples with randint < num_bg
+        matched = rpn_cls_label == 0
+        randint = F.random.randint(0, sample_per_image, shape=(num_image, max_side ** 2 * num_anchor))
+        randint = F.slice_like(randint, matched)
+        randint = randint.astype("float32") * matched
+        matched = F.where(F.broadcast_greater(randint, sample_per_image - num_pos), matched, F.zeros_like(matched))
         rpn_cls_label = F.where(matched, F.ones_like(rpn_cls_label) * -1, rpn_cls_label)
 
         # regression target
@@ -408,11 +416,11 @@ def test_fpn_rpn_target():
             [  1.  , 240.24, 346.63, 426.  ],
             [388.66,  69.92, 497.07, 346.54],
             [135.57, 249.43, 156.89, 277.22],
-            [ 31.28, 344.  ,  98.4 , 383.83],
-            [ 59.63, 287.36, 134.7 , 327.66],
-            [  1.36, 164.33, 192.92, 261.7 ],
-            [  0.  , 262.81,  61.16, 298.58],
-            [119.4 , 272.51, 143.22, 305.76],
+            # [ 31.28, 344.  ,  98.4 , 383.83],
+            # [ 59.63, 287.36, 134.7 , 327.66],
+            # [  1.36, 164.33, 192.92, 261.7 ],
+            # [  0.  , 262.81,  61.16, 298.58],
+            # [119.4 , 272.51, 143.22, 305.76],
             # [141.47, 267.91, 172.66, 302.77],
             # [155.97, 168.95, 181.  , 185.08],
             # [157.2 , 114.15, 174.06, 128.97],
@@ -428,11 +436,11 @@ def test_fpn_rpn_target():
             [  1.  , 240.24, 346.63, 426.  ],
             [388.66,  69.92, 497.07, 346.54],
             [135.57, 249.43, 156.89, 277.22],
-            [ 31.28, 344.  ,  98.4 , 383.83],
-            [ 59.63, 287.36, 134.7 , 327.66],
-            [  1.36, 164.33, 192.92, 261.7 ],
-            [  0.  , 262.81,  61.16, 298.58],
-            [119.4 , 272.51, 143.22, 305.76],
+            # [ 31.28, 344.  ,  98.4 , 383.83],
+            # [ 59.63, 287.36, 134.7 , 327.66],
+            # [  1.36, 164.33, 192.92, 261.7 ],
+            # [  0.  , 262.81,  61.16, 298.58],
+            # [119.4 , 272.51, 143.22, 305.76],
             # [141.47, 267.91, 172.66, 302.77],
             # [155.97, 168.95, 181.  , 185.08],
             # [157.2 , 114.15, 174.06, 128.97],
@@ -443,7 +451,7 @@ def test_fpn_rpn_target():
             # [  0.  , 210.9 , 190.36, 308.88],
             # [ 96.69, 297.09, 103.53, 300.95],
             # [497.25, 203.4 , 618.26, 231.01],
-            [-1, -1, -1, -1]]).reshape(2, 10, 4)
+            [-1, -1, -1, -1]]).reshape(2, 5, 4)
     im_infos = mx.nd.array([[800, 1077, 2], [800, 1077, 2]]).reshape(2, 3)
 
     rpn_cls_label, rpn_reg_target, rpn_reg_weight = _fpn_rpn_target_batch(mx.ndarray, feat_list,
