@@ -18,6 +18,15 @@ import mxnet as mx
 import numpy as np
 
 
+variable_registry = {}
+def shared_var(name, **kwargs):
+    if name not in variable_registry:
+        var = mx.sym.var(name, **kwargs)
+        variable_registry[name] = var
+
+    return variable_registry[name]
+
+
 def relu(data, name=None):
     """
     the linear rectifier activation function, y = max(x, 0)
@@ -33,6 +42,23 @@ def relu(data, name=None):
             name = prev_name + "_relu"
 
     return mx.sym.Activation(data, name=name, act_type='relu')
+
+
+def relu6(data, name=None):
+    """
+    the linear rectifier activation function, y = min(max(x, 0), 6)
+    :param data: input symbol object
+    :param name: output symbol name
+    :return: output symbol object
+    """
+    if name is None:
+        prev_name = data.name
+        if prev_name.endswith("_bn") or prev_name.endswith("_gn"):
+            name = prev_name[:-3] + "_relu"
+        else:
+            name = prev_name + "_relu"
+
+    return mx.sym.clip(data, a_max=6, a_min=0, name=name)
 
 
 def sigmoid(data, name=None):
@@ -134,6 +160,41 @@ def conv(data, name, filter, kernel=1, stride=1, pad=None, dilate=1, num_group=1
                               pad=pad,
                               dilate=dilate,
                               num_group=num_group,
+                              workspace=512,
+                              no_bias=no_bias)
+
+
+def dwconv(data, name, filter, kernel=1, stride=1, pad=None, no_bias=True,
+    init=None, lr_mult=1.0, wd_mult=1.0, weight=None, bias=None):
+    if isinstance(kernel, int):
+        kernel = (kernel, kernel)
+    if isinstance(stride, int):
+        stride = (stride, stride)
+    if pad is None:
+        assert kernel[0] % 2 == 1, "Specify pad for an even kernel size for {}".format(name)
+        pad = kernel[0] // 2
+    if isinstance(pad, int):
+        pad = (pad, pad)
+
+    # specific initialization method
+    if not isinstance(weight, mx.sym.Symbol):
+        if init is not None:
+            assert isinstance(init, mx.init.Initializer)
+            weight = mx.sym.var(name=name + "_weight", init=init, lr_mult=lr_mult, wd_mult=wd_mult)
+        elif lr_mult != 1.0 or wd_mult != 1.0:
+            weight = mx.sym.var(name=name + "_weight", lr_mult=lr_mult, wd_mult=wd_mult)
+        else:
+            weight = None
+
+    return mx.sym.Convolution(data=data,
+                              name=name,
+                              weight=weight,
+                              bias=bias,
+                              num_filter=filter,
+                              kernel=kernel,
+                              stride=stride,
+                              pad=pad,
+                              num_group=filter,
                               workspace=512,
                               no_bias=no_bias)
 

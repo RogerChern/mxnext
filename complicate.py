@@ -120,5 +120,10 @@ def normalizer_factory(type="local", ndev=None, eps=1e-5 + 1e-10, mom=0.9, lr_mu
                                             lr_mult=lr_mult,
                                             wd_mult=wd_mult)
         return gn
+
+    elif type == "dummy":
+        def dummy(data, name=None):
+            return data
+        return dummy
     else:
         raise KeyError("Unknown norm type {}".format(type))
