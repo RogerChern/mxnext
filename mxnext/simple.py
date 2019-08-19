@@ -11,7 +11,7 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 
-from .initializer import one_init, zero_init
+from mxnext.initializer import one_init, zero_init
 
 
 import mxnet as mx
@@ -369,7 +369,7 @@ try:
 except AttributeError:
     print("\033[91m" + "[Warning] Your mxnet does not support ProposalTarget" + "\033[0m")
 
-from .tvm.decode_bbox import decode_bbox as _decode_bbox
+from mxnext.tvm.decode_bbox import decode_bbox as _decode_bbox
 def decode_bbox(rois, bbox_pred, im_info, bbox_mean, bbox_std, class_agnostic, name):
     return _decode_bbox(mx.sym, rois, bbox_pred, im_info, bbox_mean, bbox_std, class_agnostic)
 
