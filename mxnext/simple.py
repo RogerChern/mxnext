@@ -136,7 +136,8 @@ def conv(data, name, filter, kernel=1, stride=1, pad=None, dilate=1, num_group=1
         dilate = (dilate, dilate)
     if pad is None:
         assert kernel[0] % 2 == 1, "Specify pad for an even kernel size for {}".format(name)
-        pad = ((kernel[0] - 1) * dilate[0] + 1) // 2
+        assert kernel[1] % 2 == 1, "Specify pad for an even kernel size for {}".format(name)
+        pad = (((kernel[0] - 1) * dilate[0] + 1) // 2, ((kernel[1] - 1) * dilate[1] + 1) // 2)
     if isinstance(pad, int):
         pad = (pad, pad)
 
