@@ -463,3 +463,15 @@ def reluconv(data, name, filter, kernel=1, stride=1, pad=None, dilate=1, num_gro
     d1 = relu(data, name=name + "_relu")
     d2 = conv(d1, name, filter, kernel, stride, pad, dilate, num_group, no_bias, init, lr_mult, wd_mult, weight, bias)
     return d2
+
+def merge_sum(sum_list, name):
+    return mx.sym.ElementWiseSum(*sum_list, name=name + '_sum')
+
+def reluconvbn(data, filters, init, norm, name, prefix, kernel=3, pad=1, stride=1):
+    data = mx.sym.Activation(data, name=name + '_relu', act_type='relu')
+    weight = mx.sym.var(name=prefix + name + "_weight", init=init)
+    bias = mx.sym.var(name=prefix + name + "_bias")
+    data = mx.sym.Convolution(data, name=name, weight=weight, bias=bias, \
+                num_filter=filters, kernel=(kernel, kernel), pad=(pad, pad), stride=(stride, stride))
+    data = norm(data, name=name+'_bn_neck')
+    return data
