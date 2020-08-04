@@ -1,6 +1,6 @@
 from __future__ import division
 
-from ..simple import reluconv, conv, pool, relu, add, whiten, var, fixbn, to_fp16
+from ..simple import reluconv, conv, pool, relu, add, whiten, var, fixbn, to_fp16, avg_pool
 from ..complicate import normalizer_factory
 
 
