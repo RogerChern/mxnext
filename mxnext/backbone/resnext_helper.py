@@ -45,7 +45,7 @@ def resnext_stage(data, name, num_block, filter, stride, dilate, group, channel_
     return data
 
 def resnext_c1(data, norm):
-    data = conv(data, filter=64, kernel=7, stride=2, name="conv0_0")
+    data = conv(data, filter=64, kernel=7, stride=2, name="conv0")
     data = norm(data, name='bn0')
     data = relu(data, name='relu0')
 
