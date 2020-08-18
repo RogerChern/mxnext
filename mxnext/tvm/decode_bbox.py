@@ -112,6 +112,7 @@ if __name__ == "__main__":
     anchors = mx.nd.array([10, 20, 55, 77, 10, 20, 50, 77]).reshape([2, 1, 4])
     im_infos = mx.nd.array([76, 72, 1, 76, 76, 1]).reshape([2, 3])
     deltas = mx.nd.array([0, 0, 0, 0.1, 0.3, 0.1, 0.2, 0.4, 0.5, 0.1, 0.2, 0.1, 0, 0, 0, 0, 0.3, 0.1, 0.2, 0.4, 0.5, 0.1, 0.2, 0.1]).reshape([2, 1, 12])
+    agnostic_deltas = mx.nd.array([0, 0, 0, 0.1, 0.3, 0.1, 0.2, 0.4, 0, 0, 0, 0, 0.3, 0.1, 0.2, 0.4]).reshape([2, 1, 8])
     means = (0.04, 0.01, 0.03, 0.02)
     stds = (0.5, 0.1, 0.1, 0.5)
 
@@ -120,21 +121,21 @@ if __name__ == "__main__":
             print("Test class_agnostic {}, bbox_decode_type {}".format(class_agnostic, bbox_decode_type))
             o1 = mx.nd.contrib.DecodeBBox(
                 rois=anchors,
-                bbox_pred=deltas,
+                bbox_pred=agnostic_deltas if class_agnostic else deltas,
                 im_info=im_infos,
                 bbox_mean=means,
                 bbox_std=stds,
-                class_agnostic=False,
+                class_agnostic=class_agnostic,
                 bbox_decode_type=bbox_decode_type
             )
             o2 = decode_bbox(
                 mx.ndarray,
                 anchors,
-                deltas,
+                agnostic_deltas if class_agnostic else deltas,
                 im_infos,
                 means,
                 stds,
-                False,
+                class_agnostic,
                 bbox_decode_type=bbox_decode_type
             )
 
