@@ -10,7 +10,14 @@ def _corner_to_center(F, boxes):
     y = ymin + (height - 1) * 0.5
     return x, y, width, height
 
-def decode_bbox(F, anchors, deltas, im_infos, means, stds, class_agnostic):
+
+def _corner_to_corner(F, boxes):
+    boxes = F.slice_axis(boxes, axis=-1, begin=-4, end=None)
+    xmin, ymin, xmax, ymax = F.split(boxes, axis=-1, num_outputs=4)
+    return xmin, ymin, xmax, ymax
+
+
+def decode_bbox(F, anchors, deltas, im_infos, means, stds, class_agnostic, bbox_decode_type='xywh'):
     """
     anchors: (#img, #roi, #cls * 4)
     deltas: (#img, #roi, #cls * 4)
@@ -23,9 +30,6 @@ def decode_bbox(F, anchors, deltas, im_infos, means, stds, class_agnostic):
     bbox: (#img, #roi, 4), [x1, y1, x2, y2]
     """
     with mx.name.Prefix("decode_bbox: "):
-        # add roi axis, layout (img, roi, coord)
-        im_infos = F.expand_dims(im_infos, axis=1)
-
         if class_agnostic:
             # TODO: class_agnostic should predict only 1 class
             # class_agnostic predicts 2 classes
@@ -34,33 +38,57 @@ def decode_bbox(F, anchors, deltas, im_infos, means, stds, class_agnostic):
             # add class axis, layout (img, roi, cls, coord)
             deltas = F.reshape(deltas, [0, 0, -4, -1, 4])  # TODO: extend to multiple anchors
             anchors = F.expand_dims(anchors, axis=-2)
-            im_infos = F.expand_dims(im_infos, axis=-2)
+        if bbox_decode_type == 'xywh':
+            ax, ay, aw, ah = _corner_to_center(F, anchors)  # anchor
+            dx, dy, dw, dh = F.split(deltas, axis=-1, num_outputs=4)
 
-        ax, ay, aw, ah = _corner_to_center(F, anchors)  # anchor
-        im_infos = F.split(im_infos, axis=-1, num_outputs=3)
-        dx, dy, dw, dh = F.split(deltas, axis=-1, num_outputs=4)
+            # delta
+            dx = dx * stds[0] + means[0]
+            dy = dy * stds[1] + means[1]
+            dw = dw * stds[2] + means[2]
+            dh = dh * stds[3] + means[3]
 
-        # delta
-        dx = dx * stds[0] + means[0]
-        dy = dy * stds[1] + means[1]
-        dw = dw * stds[2] + means[2]
-        dh = dh * stds[3] + means[3]
+            # prediction
+            px = F.broadcast_add(F.broadcast_mul(dx, aw), ax)
+            py = F.broadcast_add(F.broadcast_mul(dy, ah), ay)
+            pw = F.broadcast_mul(F.exp(dw), aw)
+            ph = F.broadcast_mul(F.exp(dh), ah)
 
-        # prediction
-        px = F.broadcast_add(F.broadcast_mul(dx, aw), ax)
-        py = F.broadcast_add(F.broadcast_mul(dy, ah), ay)
-        pw = F.broadcast_mul(F.exp(dw), aw)
-        ph = F.broadcast_mul(F.exp(dh), ah)
+            x1 = px - 0.5 * (pw - 1.0)
+            y1 = py - 0.5 * (ph - 1.0)
+            x2 = px + 0.5 * (pw - 1.0)
+            y2 = py + 0.5 * (ph - 1.0)
+        elif bbox_decode_type == 'xyxy':
+            ax1, ay1, ax2, ay2 = _corner_to_corner(F, anchors)
+            aw = ax2 - ax1 + 1
+            ah = ay2 - ay1 + 1
+            dx1, dy1, dx2, dy2 = F.split(deltas, axis=-1, num_outputs=4)
 
-        x1 = px - 0.5 * (pw - 1.0)
-        y1 = py - 0.5 * (ph - 1.0)
-        x2 = px + 0.5 * (pw - 1.0)
-        y2 = py + 0.5 * (ph - 1.0)
+            # delta
+            dx1 = dx1 * stds[0] + means[0]
+            dy1 = dy1 * stds[1] + means[1]
+            dx2 = dx2 * stds[2] + means[2]
+            dy2 = dy2 * stds[3] + means[3]
 
-        x1 = F.maximum(F.broadcast_minimum(x1, im_infos[1] - 1.0), 0)
-        y1 = F.maximum(F.broadcast_minimum(y1, im_infos[0] - 1.0), 0)
-        x2 = F.maximum(F.broadcast_minimum(x2, im_infos[1] - 1.0), 0)
-        y2 = F.maximum(F.broadcast_minimum(y2, im_infos[0] - 1.0), 0)
+            # prediction
+            x1 = F.broadcast_add(F.broadcast_mul(dx1, aw), ax1)
+            y1 = F.broadcast_add(F.broadcast_mul(dy1, ah), ay1)
+            x2 = F.broadcast_add(F.broadcast_mul(dx2, aw), ax2)
+            y2 = F.broadcast_add(F.broadcast_mul(dy2, ah), ay2)
+        else:
+            raise NotImplementedError("decode_bbox only supports xywh or xyxy bbox_decode_type")
+
+        if im_infos is not None:
+            # add roi axis, layout (img, roi, coord)
+            im_infos = F.expand_dims(im_infos, axis=1)
+            if not class_agnostic:
+                # add class axis, layout (img, roi, cls, coord)
+                im_infos = F.expand_dims(im_infos, axis=-2)
+            im_infos = F.split(im_infos, axis=-1, num_outputs=3)
+            x1 = F.maximum(F.broadcast_minimum(x1, im_infos[1] - 1.0), 0)
+            y1 = F.maximum(F.broadcast_minimum(y1, im_infos[0] - 1.0), 0)
+            x2 = F.maximum(F.broadcast_minimum(x2, im_infos[1] - 1.0), 0)
+            y2 = F.maximum(F.broadcast_minimum(y2, im_infos[0] - 1.0), 0)
 
         out = F.concat(x1, y1, x2, y2, dim=-1)
         if not class_agnostic:
@@ -77,24 +105,29 @@ if __name__ == "__main__":
     means = (0.04, 0.01, 0.03, 0.02)
     stds = (0.5, 0.1, 0.1, 0.5)
 
-    o1 = mx.nd.contrib.DecodeBBox(
-        rois=anchors,
-        bbox_pred=deltas,
-        im_info=im_infos,
-        bbox_mean=means,
-        bbox_std=stds,
-        class_agnostic=False
-    )
-    o2 = decode_bbox(
-        mx.ndarray,
-        anchors,
-        deltas,
-        im_infos,
-        means,
-        stds,
-        False
-    )
+    for class_agnostic in [True, False]:
+        for bbox_decode_type in ['xyxy', 'xywh']:
+            print("Test class_agnostic {}, bbox_decode_type {}".format(class_agnostic, bbox_decode_type))
+            o1 = mx.nd.contrib.DecodeBBox(
+                rois=anchors,
+                bbox_pred=deltas,
+                im_info=im_infos,
+                bbox_mean=means,
+                bbox_std=stds,
+                class_agnostic=False,
+                bbox_decode_type=bbox_decode_type
+            )
+            o2 = decode_bbox(
+                mx.ndarray,
+                anchors,
+                deltas,
+                im_infos,
+                means,
+                stds,
+                False,
+                bbox_decode_type=bbox_decode_type
+            )
 
-    print(o1)
-    print(o2)
-    print(o1 - o2)
+        print(o1)
+        print(o2.shape)
+        print(o1 - o2)
