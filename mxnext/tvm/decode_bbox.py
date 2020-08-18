@@ -17,6 +17,49 @@ def _corner_to_corner(F, boxes):
     return xmin, ymin, xmax, ymax
 
 
+def _bbox_transform_xywh(F, anchors, deltas, means, stds):
+    ax, ay, aw, ah = _corner_to_center(F, anchors)  # anchor
+    dx, dy, dw, dh = F.split(deltas, axis=-1, num_outputs=4)
+
+    # delta
+    dx = dx * stds[0] + means[0]
+    dy = dy * stds[1] + means[1]
+    dw = dw * stds[2] + means[2]
+    dh = dh * stds[3] + means[3]
+
+    # prediction
+    px = F.broadcast_add(F.broadcast_mul(dx, aw), ax)
+    py = F.broadcast_add(F.broadcast_mul(dy, ah), ay)
+    pw = F.broadcast_mul(F.exp(dw), aw)
+    ph = F.broadcast_mul(F.exp(dh), ah)
+
+    x1 = px - 0.5 * (pw - 1.0)
+    y1 = py - 0.5 * (ph - 1.0)
+    x2 = px + 0.5 * (pw - 1.0)
+    y2 = py + 0.5 * (ph - 1.0)
+    return x1, y1, x2, y2
+
+
+def _bbox_transform_xyxy(F, anchors, deltas, means, stds):
+    ax1, ay1, ax2, ay2 = _corner_to_corner(F, anchors)
+    aw = ax2 - ax1 + 1
+    ah = ay2 - ay1 + 1
+    dx1, dy1, dx2, dy2 = F.split(deltas, axis=-1, num_outputs=4)
+
+    # delta
+    dx1 = dx1 * stds[0] + means[0]
+    dy1 = dy1 * stds[1] + means[1]
+    dx2 = dx2 * stds[2] + means[2]
+    dy2 = dy2 * stds[3] + means[3]
+
+    # prediction
+    x1 = F.broadcast_add(F.broadcast_mul(dx1, aw), ax1)
+    y1 = F.broadcast_add(F.broadcast_mul(dy1, ah), ay1)
+    x2 = F.broadcast_add(F.broadcast_mul(dx2, aw), ax2)
+    y2 = F.broadcast_add(F.broadcast_mul(dy2, ah), ay2)
+    return x1, y1, x2, y2
+
+
 def decode_bbox(F, anchors, deltas, im_infos, means, stds, class_agnostic, bbox_decode_type='xywh'):
     """
     anchors: (#img, #roi, #cls * 4)
@@ -39,42 +82,9 @@ def decode_bbox(F, anchors, deltas, im_infos, means, stds, class_agnostic, bbox_
             deltas = F.reshape(deltas, [0, 0, -4, -1, 4])  # TODO: extend to multiple anchors
             anchors = F.expand_dims(anchors, axis=-2)
         if bbox_decode_type == 'xywh':
-            ax, ay, aw, ah = _corner_to_center(F, anchors)  # anchor
-            dx, dy, dw, dh = F.split(deltas, axis=-1, num_outputs=4)
-
-            # delta
-            dx = dx * stds[0] + means[0]
-            dy = dy * stds[1] + means[1]
-            dw = dw * stds[2] + means[2]
-            dh = dh * stds[3] + means[3]
-
-            # prediction
-            px = F.broadcast_add(F.broadcast_mul(dx, aw), ax)
-            py = F.broadcast_add(F.broadcast_mul(dy, ah), ay)
-            pw = F.broadcast_mul(F.exp(dw), aw)
-            ph = F.broadcast_mul(F.exp(dh), ah)
-
-            x1 = px - 0.5 * (pw - 1.0)
-            y1 = py - 0.5 * (ph - 1.0)
-            x2 = px + 0.5 * (pw - 1.0)
-            y2 = py + 0.5 * (ph - 1.0)
+            x1, y1, x2, y2 = _bbox_transform_xywh(F, anchors, deltas, means, stds)
         elif bbox_decode_type == 'xyxy':
-            ax1, ay1, ax2, ay2 = _corner_to_corner(F, anchors)
-            aw = ax2 - ax1 + 1
-            ah = ay2 - ay1 + 1
-            dx1, dy1, dx2, dy2 = F.split(deltas, axis=-1, num_outputs=4)
-
-            # delta
-            dx1 = dx1 * stds[0] + means[0]
-            dy1 = dy1 * stds[1] + means[1]
-            dx2 = dx2 * stds[2] + means[2]
-            dy2 = dy2 * stds[3] + means[3]
-
-            # prediction
-            x1 = F.broadcast_add(F.broadcast_mul(dx1, aw), ax1)
-            y1 = F.broadcast_add(F.broadcast_mul(dy1, ah), ay1)
-            x2 = F.broadcast_add(F.broadcast_mul(dx2, aw), ax2)
-            y2 = F.broadcast_add(F.broadcast_mul(dy2, ah), ay2)
+            x1, y1, x2, y2 = _bbox_transform_xyxy(F, anchors, deltas, means, stds)
         else:
             raise NotImplementedError("decode_bbox only supports xywh or xyxy bbox_decode_type")
 
@@ -128,6 +138,6 @@ if __name__ == "__main__":
                 bbox_decode_type=bbox_decode_type
             )
 
-        print(o1)
-        print(o2.shape)
-        print(o1 - o2)
+            print(o1)
+            print(o2.shape)
+            print(o1 - o2)
