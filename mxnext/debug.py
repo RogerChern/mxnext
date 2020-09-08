@@ -89,12 +89,23 @@ def Debug(data, type="nchw", num_args=1, **kwargs):
     return mx.sym.Custom(op_type="Debug", **kwargs)
 
 
-def default_print_function(*inputs):
-    for i, input in enumerate(inputs[1:]):
-        print("input{}: {}".format(i, input))
+def default_print_function(dev_id, num_iter, *inputs):
+    if dev_id == 0:
+        print("num_iter: {}".format(num_iter))
+        for i, input in enumerate(inputs):
+            print("input{}: {}".format(i, input))
 
 
 def forward_debug(*data, **kwargs):
+    """
+    Args:
+        data: Iterable[mx.Symbol], symbols we want to get the output
+        callback: a callable with signature (dev_id, num_iter, *data) -> None.
+            The callback will receive a list of mx.ndarray as the same order of symbols.
+            You can print or save the ndarray for debug usage.
+    Returns:
+        data: Iterable[mx.Symbol], the same symbols as the inputs
+    """
     kwargs.update({"data": data[0], "num_args": len(data), "do_forward": True})
     # if len(input_symbols) > 1, give them names
     for i, v in enumerate(data[1:], start=1):
@@ -107,6 +118,15 @@ def forward_debug(*data, **kwargs):
 
 
 def backward_debug(*data, **kwargs):
+    """
+    Args:
+        data: Iterable[mx.Symbol], symbols we want to get the output
+        callback: a callable with signature (dev_id, num_iter, *data) -> None.
+            The callback will receive a list of mx.ndarray as the same order of symbols.
+            You can print or save the ndarray for debug usage.
+    Returns:
+        data: Iterable[mx.Symbol], the same symbols as the inputs
+    """
     kwargs.update({"data": data[0], "num_args": len(data), "do_backward": True})
     # if len(input_symbols) > 1, give them names
     for i, v in enumerate(data[1:], start=1):
@@ -122,10 +142,11 @@ if __name__ == "__main__":
     x = mx.sym.var("x")
     y = mx.sym.var("y")
     x = forward_debug(x)
-    x = forward_debug(x, callback=lambda _, a: print("a forward = {}".format(a)))
-    x = backward_debug(x, callback=lambda _, a: print("a backward = {}".format(a)))
-    (x, y) = forward_debug(x, y, callback=lambda _, a, b: print("a + b = {}".format(a + b)))
-    (x, y) = backward_debug(x, y, callback=lambda _, a, b: print("a + b backward = {}".format(a + b)))
+    x = backward_debug(x)
+    x = forward_debug(x, callback=lambda dev_id, num_iter, a: print("a forward = {}".format(a)))
+    x = backward_debug(x, callback=lambda dev_id, num_iter, a: print("a backward = {}".format(a)))
+    # (x, y) = forward_debug(x, y, callback=lambda dev_id, num_iter, a, b: print("a + b = {}".format(a + b)))
+    # (x, y) = backward_debug(x, y, callback=lambda dev_id, num_iter, a, b: print("a + b backward = {}".format(a + b)))
     x = x * 2
     z = x + y  # type: mx.sym.Symbol
 
