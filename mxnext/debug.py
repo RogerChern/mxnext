@@ -96,7 +96,7 @@ def default_print_function(dev_id, num_iter, *inputs):
             print("input{}: {}".format(i, input))
 
 
-def forward_debug(*data, **kwargs):
+def forward_debug(*data, callback=None, **kwargs):
     """
     Args:
         data: Iterable[mx.Symbol], symbols we want to get the output
@@ -110,14 +110,14 @@ def forward_debug(*data, **kwargs):
     # if len(input_symbols) > 1, give them names
     for i, v in enumerate(data[1:], start=1):
         kwargs.update({"data%d" % i: v})
-    callback = kwargs.get("callback", default_print_function)
+    callback = callback or default_print_function
     callback_code = marshal.dumps(callback.__code__)
     kwargs["callback"] = json.dumps(callback_code.decode("latin"))
     num_iter = mx.sym.var("num_iter_{}".format(uuid.uuid4()), init=mx.init.Constant(0))
     return mx.sym.Custom(op_type="Debug", num_iter=num_iter, **kwargs)
 
 
-def backward_debug(*data, **kwargs):
+def backward_debug(*data, callback=None, **kwargs):
     """
     Args:
         data: Iterable[mx.Symbol], symbols we want to get the output
@@ -131,7 +131,7 @@ def backward_debug(*data, **kwargs):
     # if len(input_symbols) > 1, give them names
     for i, v in enumerate(data[1:], start=1):
         kwargs.update({"data%d" % i: v})
-    callback = kwargs.get("callback", default_print_function)
+    callback = callback or default_print_function
     callback_code = marshal.dumps(callback.__code__)
     kwargs["callback"] = json.dumps(callback_code.decode("latin"))
     num_iter = mx.sym.var("num_iter_{}".format(uuid.uuid4()), init=mx.init.Constant(0))
