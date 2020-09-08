@@ -1,3 +1,4 @@
+import math
 import mxnet as mx
 
 
@@ -106,6 +107,49 @@ def decode_bbox(F, anchors, deltas, im_infos, means, stds, class_agnostic, bbox_
     return out
 
 
+def decode_rbbox(F, anchors, deltas, im_infos, means, stds):
+    """
+    anchors: (#img, #roi, #cls * 4)
+    deltas: (#img, #roi, #cls * 5)
+    im_infos: (#img, 3), [h, w, scale]
+    means: (5, ), [x, y, h, w, r]
+    stds: (5, ), [x, y, h, w, r]
+    class_agnostic: bool
+
+    Returns:
+    bbox: (#img, #roi, 5), [x, y, h, w, r]
+    """
+    with mx.name.Prefix("decode_rbbox: "):
+        # add roi axis, layout (img, roi, coord)
+        im_infos = F.expand_dims(im_infos, axis=1)
+
+        # TODO: class_agnostic should predict only 1 class
+        # class_agnostic predicts 2 classes
+        # (#img, #roi, 5)
+        deltas = F.slice_axis(deltas, axis=-1, begin=-5, end=None)
+
+        ax, ay, aw, ah = _corner_to_center(F, anchors)  # (#img, #roi, 1)
+        h, w, scale = F.split(im_infos, axis=-1, num_outputs=3)  # (#img, 1)
+        dx, dy, dw, dh, dr = F.split(deltas, axis=-1, num_outputs=5)
+
+        # delta
+        dx = dx * stds[0] + means[0]
+        dy = dy * stds[1] + means[1]
+        dw = dw * stds[2] + means[2]
+        dh = dh * stds[3] + means[3]
+        dr = dr * stds[4] + means[4]
+
+        # prediction
+        px = F.broadcast_add(F.broadcast_mul(dx, aw), ax)
+        py = F.broadcast_add(F.broadcast_mul(dy, ah), ay)
+        pw = F.broadcast_mul(F.exp(dw), aw)
+        ph = F.broadcast_mul(F.exp(dh), ah)
+        pr = (2 * math.pi) * dr % (2 * math.pi)
+
+        rbbox = F.concat(px, py, pw, ph, pr, dim=-1)
+    return rbbox
+
+
 if __name__ == "__main__":
     import mxnet as mx
 
@@ -142,3 +186,42 @@ if __name__ == "__main__":
             print(o1)
             print(o2.shape)
             print(o1 - o2)
+
+    # rrbox tests
+    anchors = mx.nd.array(
+        [
+            [10, 20, 55, 77],
+            [10, 20, 50, 77],
+        ]
+    ).reshape([2, 1, 4])  # (#img, #roi, 4)
+    im_infos = mx.nd.array(
+        [
+            [76, 72, 1],
+            [76, 76, 1],
+        ]
+    ).reshape([2, 3])  # (#img, 3)
+    deltas = mx.nd.array(
+        [
+            [
+                [0.0, 0.0, 0.0, 0.1, 0.1],
+                [0.5, 0.1, 0.2, 0.1, 0.3],
+            ],
+            [
+                [0.0, 0.0, 0.0, 0.0, 0.1],
+                [0.5, 0.1, 0.2, 0.1, 0.3],
+            ],
+        ]
+    ).reshape([2, 1, 10])  # (#img, #roi, #cls * 5)
+    means = (0.04, 0.01, 0.03, 0.02, 0.02)
+    stds = (0.5, 0.1, 0.1, 0.5, 0.5)
+
+    o2 = decode_rbbox(
+        mx.ndarray,
+        anchors,
+        deltas,
+        im_infos,
+        means,
+        stds,
+    )
+
+    print(o2)

@@ -374,6 +374,10 @@ from mxnext.tvm.decode_bbox import decode_bbox as _decode_bbox
 def decode_bbox(rois, bbox_pred, im_info, bbox_mean, bbox_std, class_agnostic, name, bbox_decode_type='xywh'):
     return _decode_bbox(mx.sym, rois, bbox_pred, im_info, bbox_mean, bbox_std, class_agnostic, bbox_decode_type)
 
+from mxnext.tvm.encode_bbox import encode_rbbox as _encode_rbbox
+def encode_rbbox(anchor, proposal_assigned_gt, im_info, mean, std):
+    return _encode_rbbox(mx.sym, anchor, proposal_assigned_gt, im_info, mean, std)
+
 try:
     bbox_norm = mx.sym.contrib.BBoxNorm
 except AttributeError:
