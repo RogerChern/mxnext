@@ -1,3 +1,5 @@
 *.pyc
 mxnext.egg-info
 __pycache__
+build/
+dist/
